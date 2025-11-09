@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inicio | Sistema de Flujo de Caja</title>
+  <link rel="stylesheet" href="styles.css">
+
+  <style>
+    /* --- Estilos locales mínimos para esta vista --- */
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: linear-gradient(135deg, #f0f4ff, #e6ecff);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+    }
+
+    h1 {
+      color: #2c3e50;
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+
+    h2 {
+      color: #4b6584;
+      font-size: 1.1rem;
+      font-weight: normal;
+      margin-bottom: 2rem;
+    }
+
+    .options {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .card {
+      width: 250px;
+      height: 160px;
+      background-color: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      text-decoration: none;
+      color: #2c3e50;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .card h3 {
+      margin-top: 1rem;
+      font-size: 1.1rem;
+    }
+
+    footer {
+      position: absolute;
+      bottom: 20px;
+      font-size: 0.85rem;
+      color: #7f8c8d;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>💰 Sistema de Flujo de Caja</h1>
+  <h2>Selecciona el tipo de flujo que deseas visualizar</h2>
+
+  <div class="options">
+    <!-- Opción 1: Flujo Real -->
+    <a href="flujo-real.html" class="card">
+      <img src="https://img.icons8.com/ios-filled/80/4b7bec/combo-chart.png" alt="Flujo Real" />
+      <h3>Flujo de Caja Real</h3>
+    </a>
+
+    <!-- Opción 2: Flujo Proyectado -->
+    <a href="flujo-proyectado.html" class="card">
+      <img src="https://img.icons8.com/ios-filled/80/20bf6b/futures.png" alt="Flujo Proyectado" />
+      <h3>Flujo de Caja Proyectado</h3>
+    </a>
+  </div>
+
+  <footer>© 2025 Cash Flow System — DSI</footer>
+
+  <script src="script.js" defer></script>
+</body>
+</html>

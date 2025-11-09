@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flujo de Caja Real</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="real-body">
+    <div class="container">
+        <h1>Flujo de Caja Real</h1>
+        
+        <!-- agregado: muestra del proyecto seleccionado -->
+        <div id="proyectoInfo" style="margin: 6px 0; font-weight: 600;">
+            <!-- Se llenará desde JS: "Proyecto: {nombPyto} (CodCIA|CodPyto)" -->
+        </div>
+
+        <div class="controls-container">
+            <div class="left-controls">
+                <!-- Selector de proyectos -->
+                <select id="selectProyecto" disabled>
+                    <option value="">Seleccione proyecto</option>
+                </select>
+
+                <!-- Selector de años del proyecto -->
+                <select id="yearSelect">
+                    <option value="">Año</option>
+                </select>
+            </div>
+            
+            <div class="right-controls">
+                <span class="date-label">Inicio:</span>
+                <input type="date" id="fechaInicio" readonly>
+                
+                <span class="date-label">Fin:</span>
+                <input type="date" id="fechaFin" readonly>
+            </div>
+        </div>
+
+        <!-- agregado: hidden inputs para almacenar PK compuesta del proyecto -->
+        <input type="hidden" id="codCiaHidden">
+        <input type="hidden" id="codPytoHidden">
+
+        <!-- agregado: contenedor simple para mensajes/errores (opcional para JS) -->
+        <div id="statusMsg" aria-live="polite"></div>
+
+        <!-- Contenedor con scroll -->
+        <div class="table-container" style="overflow-x: auto;">
+            <table id="tablaFlujo">
+                <thead>
+                    <tr id="headerRow">
+                        <th class="concepto-column">Concepto</th>
+                        <th class="month-column">Enero</th>
+                        <th class="month-column">Febrero</th>
+                        <th class="month-column">Marzo</th>
+                        <th class="month-column">Abril</th>
+                        <th class="month-column">Mayo</th>
+                        <th class="month-column">Junio</th>
+                        <th class="month-column">Julio</th>
+                        <th class="month-column">Agosto</th>
+                        <th class="month-column">Septiembre</th>
+                        <th class="month-column">Octubre</th>
+                        <th class="month-column">Noviembre</th>
+                        <th class="month-column">Diciembre</th>
+                        <th class="suma-column">Suma</th>
+                        <th class="acum-column">Acum. Ant.</th>
+                        <th class="total-column">Total</th>
+                    </tr>
+                </thead>
+                <tbody id="bodyRows">
+                    <!-- Filas base iniciales -->
+                    <!-- MOD: agregué id="rowIngresos" para insertar conceptos de ingresos debajo -->
+                    <tr class="separator-row" id="rowIngresos">
+                        <td class="separator-cell">INGRESOS</td>
+                        <td colspan="15"></td>
+                    </tr>
+                    <!-- MOD: agregué id="rowEgresos" para insertar conceptos de egresos debajo -->
+                    <tr class="separator-row" id="rowEgresos">
+                        <td class="separator-cell">EGRESOS</td>
+                        <td colspan="15"></td>
+                    </tr>
+                    <!-- MOD (opcional): id="rowNeto" por si luego calculamos el neto -->
+                    <tr class="separator-row separator-neto" id="rowNeto">
+                        <td class="separator-cell">FLUJO DE CAJA NETO</td>
+                        <td colspan="15"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="buttons-container">
+            <button class="concepto-btn btn-off" id="btnProyectos">Proyectos</button>
+            <button class="concepto-btn" id="btnConcepto">Concepto</button>
+            <button class="concepto-btn" id="btnValores">Valores</button>
+            <button class="concepto-btn" id="btnGuardar" type="button">Guardar</button>
+            <button class="concepto-btn" id="btnGuardarTodos" type="button">Guardar todos</button>
+
+        </div>
+    </div>
+    <footer>© 2025 Flujo de caja — DSI - GRUPO 5</footer>
+    <script src="script.js"></script>
+</body>
+</html>

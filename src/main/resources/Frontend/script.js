@@ -1,0 +1,723 @@
+// Frontend/script.js
+// Asume Live Server en http://127.0.0.1:5501
+// Backend en http://localhost:8080
+
+// Bases de API
+const PROJECTS_BASE = "http://localhost:8080/api/proyectos";
+const API_BASE      = "http://localhost:8080/api";
+
+let proyectos = [];
+let conceptosCargados = { ingresos: [], egresos: [] };
+let proyectoSeleccionado = null;
+let annoSeleccionado = null;
+
+// --- referencias de la UI ---
+const proyectoInfoEl = document.getElementById("proyectoInfo");
+const codCiaHidden   = document.getElementById("codCiaHidden");
+const codPytoHidden  = document.getElementById("codPytoHidden");
+const statusMsgEl    = document.getElementById("statusMsg");
+
+function setStatus(msg) {
+  if (statusMsgEl) statusMsgEl.textContent = msg || "";
+}
+
+// (esta primera init queda sobrescrita por la de abajo, pero la mantengo intacta)
+async function init() {
+  // await cargarProyectos();
+  crearHeaderTabla();
+  agregarFilasBase();
+  setupEventListeners();
+}
+
+function crearHeaderTabla() {
+  const headerRow = document.getElementById("headerRow");
+  headerRow.innerHTML = "";
+  const cols = [
+    "Concepto","Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio",
+    "Agosto","Septiembre","Octubre","Noviembre","Diciembre","Suma","Acum. Ant.","Total",
+  ];
+  cols.forEach((c) => {
+    const th = document.createElement("th");
+    th.textContent = c;
+    headerRow.appendChild(th);
+  });
+}
+
+function agregarFilasBase() {
+  const tbody = document.getElementById("bodyRows");
+  tbody.innerHTML = "";
+
+  // INGRESOS
+  const trIngHeader = document.createElement("tr");
+  trIngHeader.classList.add("separator-row");
+  const tdIng = document.createElement("td");
+  tdIng.colSpan = 16;
+  tdIng.textContent = "INGRESOS";
+  trIngHeader.appendChild(tdIng);
+  tbody.appendChild(trIngHeader);
+
+  // EGRESOS
+  const trEgrHeader = document.createElement("tr");
+  trEgrHeader.classList.add("separator-row");
+  const tdEgr = document.createElement("td");
+  tdEgr.colSpan = 16;
+  tdEgr.textContent = "EGRESOS";
+  trEgrHeader.appendChild(tdEgr);
+  tbody.appendChild(trEgrHeader);
+
+  // NETO
+  const trNet = document.createElement("tr");
+  trNet.classList.add("separator-neto");
+  const tdNet = document.createElement("td");
+  tdNet.textContent = "FLUJO DE CAJA NETO";
+  trNet.appendChild(tdNet);
+  for (let i = 0; i < 15; i++) {
+    const td = document.createElement("td");
+    td.textContent = "0";
+    trNet.appendChild(td);
+  }
+  tbody.appendChild(trNet);
+}
+
+// 🔧 acepta flag para decidir si borra selección del proyecto
+function resetTabla(resetProyecto = false) {
+  conceptosCargados = { ingresos: [], egresos: [] };
+  proyectoSeleccionado = null;
+  annoSeleccionado = null;
+
+  if (resetProyecto) {
+    document.getElementById("selectProyecto").value = "";
+    const yd = document.getElementById("yearDisplay"); // opcional
+    if (yd) yd.textContent = "";
+    if (proyectoInfoEl) proyectoInfoEl.textContent = "";
+    if (codCiaHidden) codCiaHidden.value = "";
+    if (codPytoHidden) codPytoHidden.value = "";
+    setStatus("");
+  }
+  agregarFilasBase();
+}
+
+async function cargarProyectos() {
+  try {
+    const res = await fetch(PROJECTS_BASE);
+    if (!res.ok) throw new Error("Error al obtener proyectos");
+    proyectos = await res.json();
+
+    const select = document.getElementById("selectProyecto");
+    select.innerHTML = '<option value="">-- Seleccione proyecto --</option>';
+
+    proyectos.forEach((p) => {
+      const opt = document.createElement("option");
+      // MOD: el endpoint /api/proyectos no trae codCia; y en backend codCia=1 y nroVersion=1 son fijos.
+      opt.value = String(p.codPyto);
+      opt.textContent = p.nombPyto;
+      opt.dataset.annoIni = p.annoIni;
+      opt.dataset.annoFin = p.annoFin;
+      select.appendChild(opt);
+    });
+    select.disabled = false;
+  } catch (err) {
+    console.error(err);
+    alert("No se pudieron cargar los proyectos: " + err.message);
+    document.getElementById("selectProyecto").disabled = true;
+    throw err;
+  }
+}
+
+function setupEventListeners() {
+
+  const selectProyecto = document.getElementById("selectProyecto");
+  if (!selectProyecto) {
+    // No es pantalla de flujo real
+    return;
+  }
+
+  const btnProyectos = document.getElementById("btnProyectos");
+  if (btnProyectos) {
+    btnProyectos.addEventListener("click", async (ev) => {
+      const btn = ev.currentTarget;
+      const select = document.getElementById("selectProyecto");
+
+      if (!btn.classList.contains("btn-off")) {
+        console.log("Proyectos ya cargados.");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Cargando...";
+
+      try {
+        await cargarProyectos();
+        btn.classList.remove("btn-off");
+        btn.textContent = "Proyectos";
+        select.focus();
+        setStatus("Proyectos cargados. Seleccione uno.");
+      } catch (err) {
+        btn.textContent = "Proyectos";
+        alert("No se pudieron cargar los proyectos.");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  document.getElementById("selectProyecto").addEventListener("change", (e) => {
+    const yearSelect  = document.getElementById("yearSelect");
+    const fechaInicio = document.getElementById("fechaInicio");
+    const fechaFin    = document.getElementById("fechaFin");
+    const yearDisplay = document.getElementById("yearDisplay"); // puede no existir
+
+    if (!e.target.value) {
+      resetTabla(true);
+      yearSelect.innerHTML = '<option value="">Año</option>';
+      fechaInicio.value = "";
+      fechaFin.value = "";
+      if (yearDisplay) yearDisplay.textContent = "--";
+      return;
+    }
+
+    resetTabla(false);
+
+    const codPyto = parseInt(e.target.value, 10);
+    const codCia  = 1;
+
+    const optSel  = e.target.options[e.target.selectedIndex];
+    const annoIni = parseInt(optSel.dataset.annoIni, 10);
+    const annoFin = parseInt(optSel.dataset.annoFin, 10);
+
+    proyectoSeleccionado = { codCia, codPyto, annoIni, annoFin };
+
+    if (codCiaHidden)  codCiaHidden.value  = proyectoSeleccionado.codCia;
+    if (codPytoHidden) codPytoHidden.value = proyectoSeleccionado.codPyto;
+    if (proyectoInfoEl) {
+      proyectoInfoEl.textContent = `Proyecto: ${optSel.textContent}`;
+    }
+
+    const yearSelectEl = document.getElementById("yearSelect");
+    yearSelectEl.innerHTML = "";
+    for (let y = annoIni; y <= annoFin; y++) {
+      const opt = document.createElement("option");
+      opt.value = y;
+      opt.textContent = y;
+      yearSelectEl.appendChild(opt);
+    }
+
+    annoSeleccionado = annoIni;
+    yearSelectEl.value = annoSeleccionado;
+    if (yearDisplay) yearDisplay.textContent = String(annoSeleccionado);
+
+    fechaInicio.value = `${annoIni}-01-01`;
+    fechaFin.value    = `${annoFin}-12-31`;
+    setStatus("Proyecto cargado.");
+  });
+
+  document.getElementById("btnConcepto").addEventListener("click", async (ev) => {
+    if (!proyectoSeleccionado) {
+      alert("Seleccione primero un proyecto");
+      return;
+    }
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    btn.textContent = "Cargando...";
+    try {
+      await cargarConceptos(proyectoSeleccionado.codPyto);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Concepto";
+    }
+  });
+
+  const btnPrev = document.getElementById("btnYearPrev");
+  if (btnPrev) {
+    btnPrev.addEventListener("click", async () => {
+      if (!proyectoSeleccionado) return;
+      if (annoSeleccionado > proyectoSeleccionado.annoIni) {
+        annoSeleccionado--;
+        const yearDisplay = document.getElementById("yearDisplay");
+        if (yearDisplay) yearDisplay.textContent = String(annoSeleccionado);
+        try {
+          await cargarValoresReales(
+            proyectoSeleccionado.codCia,
+            proyectoSeleccionado.codPyto,
+            annoSeleccionado
+          );
+        } catch {}
+      }
+    });
+  }
+
+  const btnNext = document.getElementById("btnYearNext");
+  if (btnNext) {
+    btnNext.addEventListener("click", async () => {
+      if (!proyectoSeleccionado) return;
+      if (annoSeleccionado < proyectoSeleccionado.annoFin) {
+        annoSeleccionado++;
+        const yearDisplay = document.getElementById("yearDisplay");
+        if (yearDisplay) yearDisplay.textContent = String(annoSeleccionado);
+        try {
+          await cargarValoresReales(
+            proyectoSeleccionado.codCia,
+            proyectoSeleccionado.codPyto,
+            annoSeleccionado
+          );
+        } catch {}
+      }
+    });
+  }
+
+  const btnValores = document.getElementById("btnValores");
+  if (btnValores) {
+    btnValores.addEventListener("click", async () => {
+      if (!proyectoSeleccionado || !annoSeleccionado) {
+        alert("Seleccione proyecto y año.");
+        return;
+      }
+      btnValores.disabled = true;
+      const old = btnValores.textContent;
+      btnValores.textContent = "Calculando...";
+      try {
+        await cargarValoresReales(
+          proyectoSeleccionado.codCia,
+          proyectoSeleccionado.codPyto,
+          annoSeleccionado
+        );
+        setStatus(`Valores reales ${annoSeleccionado} cargados.`);
+      } catch (e) {
+        console.error(e);
+        alert("No se pudieron cargar los valores: " + e.message);
+      } finally {
+        btnValores.textContent = old;
+        btnValores.disabled = false;
+      }
+    });
+  }
+
+  const yearSelectEl2 = document.getElementById("yearSelect");
+  if (yearSelectEl2) {
+    yearSelectEl2.addEventListener("change", async e => {
+      if (!proyectoSeleccionado) return;
+      annoSeleccionado = parseInt(e.target.value, 10);
+      const yd = document.getElementById("yearDisplay");
+      if (yd) yd.textContent = String(annoSeleccionado);
+      try {
+        await cargarValoresReales(
+          proyectoSeleccionado.codCia,
+          proyectoSeleccionado.codPyto,
+          annoSeleccionado
+        );
+      } catch {}
+    });
+  }
+
+  // 🆕 LISTENER: Botón Guardar
+  const btnGuardar = document.getElementById("btnGuardar");
+  if (btnGuardar) {
+    btnGuardar.addEventListener("click", guardarFlujoReal);
+  }
+  // 🆕 LISTENER: Botón Guardar todos los años
+  const btnGuardarTodos = document.getElementById("btnGuardarTodos");
+  if (btnGuardarTodos) {
+    btnGuardarTodos.addEventListener("click", guardarTodosLosAnios);
+  }
+}
+
+// MOD: backend asume codCia=1 y nroVersion=1 → solo enviamos codPyto
+async function cargarConceptos(codPyto) {
+  try {
+    const url = `${API_BASE}/conceptos?codPyto=${codPyto}`;
+    console.log("FETCH:", url);
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${res.statusText} ${text}`);
+    }
+    /** @type {{ingEgr:"I"|"E",codPartida:number,desPartida:string,nivel:number,orden?:number|null}[]} */
+    const data = await res.json();
+
+    const ingresos = data
+      .filter(d => d.ingEgr === "I")
+      .sort((a,b)=>(a.orden ?? a.codPartida)-(b.orden ?? b.codPartida));
+
+    const egresos  = data
+      .filter(d => d.ingEgr === "E")
+      .sort((a,b)=>(a.orden ?? a.codPartida)-(b.orden ?? b.codPartida));
+
+    conceptosCargados.ingresos = ingresos;
+    conceptosCargados.egresos  = egresos;
+
+    renderConceptos();
+  } catch (err) {
+    console.error("ERROR cargarConceptos:", err);
+    alert("No se pudieron cargar los conceptos: " + err.message);
+  }
+}
+
+function renderConceptos() {
+  const tbody = document.getElementById("bodyRows");
+  tbody.innerHTML = "";
+
+  // INGRESOS header
+  const trIngHeader = document.createElement("tr");
+  trIngHeader.classList.add("separator-row");          // ✅ separador oscuro
+  const tdIng = document.createElement("td");
+  tdIng.colSpan = 16;
+  tdIng.textContent = "INGRESOS";
+  trIngHeader.appendChild(tdIng);
+  tbody.appendChild(trIngHeader);
+
+  conceptosCargados.ingresos.forEach((p) => {
+    tbody.appendChild(crearFilaPartida(p));            // filas claras
+  });
+
+  // EGRESOS header
+  const trEgrHeader = document.createElement("tr");
+  trEgrHeader.classList.add("separator-row");          // ✅ separador oscuro
+  const tdEgr = document.createElement("td");
+  tdEgr.colSpan = 16;
+  tdEgr.textContent = "EGRESOS";
+  trEgrHeader.appendChild(tdEgr);
+  tbody.appendChild(trEgrHeader);
+
+  conceptosCargados.egresos.forEach((p) => {
+    tbody.appendChild(crearFilaPartida(p));            // filas claras
+  });
+
+  // NETO
+  const trNet = document.createElement("tr");
+  trNet.classList.add("separator-neto");               // ✅ separador neto
+  const tdNet = document.createElement("td");
+  tdNet.textContent = "FLUJO DE CAJA NETO";
+  trNet.appendChild(tdNet);
+  for (let i = 0; i < 15; i++) {
+    const td = document.createElement("td");
+    td.textContent = "0";
+    trNet.appendChild(td);
+  }
+  tbody.appendChild(trNet);
+
+  if (!conceptosCargados.ingresos.length && !conceptosCargados.egresos.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 16;
+    td.textContent = "Sin conceptos para este proyecto.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+}
+
+// 🔹 MODIFICADO: marcar la fila con info mínima para el guardado
+function crearFilaPartida(partida) {
+  const tr = document.createElement("tr");
+  tr.classList.add("data-row");                 // 🔹 NUEVO: identifica filas de datos
+  if (partida.ingEgr) {
+    tr.dataset.ingEgr = partida.ingEgr;         // 🔹 NUEVO: I / E para el backend
+  }
+
+  const tdConcepto = document.createElement("td");
+  tdConcepto.textContent = partida.desPartida;
+  tdConcepto.dataset.codPartida = partida.codPartida;
+  tdConcepto.classList.add("concepto-column");  // ✅ marca como fila de concepto (clara)
+
+  // sangría por nivel (si viene desde backend)
+  if (typeof partida.nivel === "number" && !isNaN(partida.nivel)) {
+    tdConcepto.style.paddingLeft = `${Math.max(0, partida.nivel - 1) * 16}px`;
+  }
+  tr.appendChild(tdConcepto);
+
+  // 12 meses + Suma + Acum Ant. + Total
+  for (let i = 0; i < 15; i++) {
+    const td = document.createElement("td");
+    td.textContent = "0";
+    td.dataset.codPartida = partida.codPartida;
+    td.dataset.colIndex = i;
+    tr.appendChild(td);
+  }
+  return tr;
+}
+
+// === NUEVO: cargar valores reales desde el backend y pintar la tabla ===
+async function cargarValoresReales(codCia, codPyto, anno) {
+  if (!conceptosCargados.ingresos.length && !conceptosCargados.egresos.length) {
+    setStatus("Primero carga los conceptos (botón 'Concepto').");
+    return;
+  }
+
+  const url = `${API_BASE}/valores/real?codCia=${codCia}&codPyto=${codPyto}&anno=${anno}`;
+  const res = await fetch(url, { mode: "cors" });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status} ${res.statusText} ${txt}`);
+  }
+  const data = await res.json();
+
+  resetCeldasNumericas();
+
+  data.forEach(row => {
+    if (row.ingEgr === "N" || row.codPartida === 0) {
+      pintarFilaNeto(row.valores);
+    } else {
+      pintarFilaPartidaValores(row.codPartida, row.valores);
+    }
+  });
+}
+
+function resetCeldasNumericas() {
+  const tbody = document.getElementById("bodyRows");
+  if (!tbody) return;
+  tbody.querySelectorAll("tr").forEach(tr => {
+    const tds = Array.from(tr.querySelectorAll("td"));
+    if (tds.length >= 16) {
+      for (let i = 1; i < tds.length; i++) tds[i].textContent = "0";
+    }
+  });
+}
+
+function pintarFilaPartidaValores(codPartida, valores) {
+  const tbody = document.getElementById("bodyRows");
+  if (!tbody) return;
+
+  const conceptCell = tbody.querySelector(
+    `tr > td:first-child[data-cod-partida="${codPartida}"]`
+  );
+  if (!conceptCell) return;
+
+  const tr = conceptCell.parentElement;
+  const celdas = Array.from(tr.querySelectorAll("td"));
+  if (celdas.length < 16) return;
+
+  for (let i = 0; i < 12; i++) {
+    const v = (valores.mes?.[i] ?? 0);
+    celdas[i + 1].textContent = formatNumber(v);
+  }
+  celdas[13].textContent = formatNumber(valores.suma ?? 0);
+  celdas[14].textContent = formatNumber(valores.acumAnt ?? 0);
+  celdas[15].textContent = formatNumber(valores.total ?? 0);
+}
+
+function pintarFilaNeto(valores) {
+  const tbody = document.getElementById("bodyRows");
+  if (!tbody) return;
+
+  const netoRow = Array.from(tbody.querySelectorAll("tr")).find(tr => {
+    const first = tr.querySelector("td");
+    return first && first.textContent.trim().toUpperCase() === "FLUJO DE CAJA NETO";
+  });
+  if (!netoRow) return;
+
+  const celdas = Array.from(netoRow.querySelectorAll("td"));
+  if (celdas.length < 16) return;
+
+  for (let i = 0; i < 12; i++) {
+    const v = (valores.mes?.[i] ?? 0);
+    celdas[i + 1].textContent = formatNumber(v);
+  }
+  celdas[13].textContent = formatNumber(valores.suma ?? 0);
+  celdas[14].textContent = formatNumber(valores.acumAnt ?? 0);
+  celdas[15].textContent = formatNumber(valores.total ?? 0);
+}
+
+function formatNumber(n) {
+  const num = Number(n ?? 0);
+  return isFinite(num) ? num.toFixed(2) : "0.00";
+}
+
+// 🆕 NUEVO: arma las filas para un año dado usando la tabla actual
+function construirFilasParaAnno(anio) {
+  const tbody = document.getElementById("bodyRows");
+  const filas = [];
+  if (!tbody || !proyectoSeleccionado) return filas;
+
+  let orden = 1;
+  const rows = tbody.querySelectorAll("tr.data-row");
+
+  rows.forEach(tr => {
+    const first = tr.querySelector("td");
+    if (!first) return;
+
+    const codPartida = parseInt(first.dataset.codPartida || tr.dataset.codPartida, 10);
+    const ingEgr = tr.dataset.ingEgr || "";
+
+    if (!codPartida || !ingEgr) return;
+
+    const tds = tr.querySelectorAll("td");
+    const impRealMes = [];
+
+    // columnas 1..12 = meses
+    for (let i = 1; i <= 12 && i < tds.length; i++) {
+      const txt = (tds[i].textContent || "").replace(/,/g, "").trim();
+      const num = parseFloat(txt);
+      impRealMes.push(isNaN(num) ? 0 : num);
+    }
+
+    filas.push({
+      anno: anio,
+      codCia: proyectoSeleccionado.codCia,
+      codPyto: proyectoSeleccionado.codPyto,
+      ingEgr,
+      tipo: "R",
+      codPartida,
+      orden: orden++,
+      impRealMes
+    });
+  });
+
+  return filas;
+}
+
+// 🆕 NUEVO: arma el payload y llama al backend /valores/real/guardar
+async function guardarFlujoReal() {
+  if (!proyectoSeleccionado || !annoSeleccionado) {
+    alert("Seleccione proyecto y año antes de guardar.");
+    return;
+  }
+
+  const tbody = document.getElementById("bodyRows");
+  if (!tbody) {
+    alert("No se encontró la tabla de flujo.");
+    return;
+  }
+
+  const filas = [];
+  let orden = 1;
+
+  const rows = tbody.querySelectorAll("tr.data-row");
+  rows.forEach(tr => {
+    const first = tr.querySelector("td");
+    if (!first) return;
+
+    const codPartida = parseInt(first.dataset.codPartida || tr.dataset.codPartida, 10);
+    const ingEgr = tr.dataset.ingEgr || "";   // viene desde crearFilaPartida
+
+    if (!codPartida || !ingEgr) return;
+
+    const tds = tr.querySelectorAll("td");
+    const impRealMes = [];
+
+    // columnas 1..12 = meses
+    for (let i = 1; i <= 12 && i < tds.length; i++) {
+      const txt = (tds[i].textContent || "").replace(/,/g, "").trim();
+      const num = parseFloat(txt);
+      impRealMes.push(isNaN(num) ? 0 : num);
+    }
+
+    filas.push({
+      anno: annoSeleccionado,
+      codCia: proyectoSeleccionado.codCia,
+      codPyto: proyectoSeleccionado.codPyto,
+      ingEgr: ingEgr,
+      tipo: "R",
+      codPartida: codPartida,
+      orden: orden++,
+      impRealMes: impRealMes
+    });
+  });
+
+  if (!filas.length) {
+    alert("No hay filas de valores para guardar.");
+    return;
+  }
+
+  const btnGuardar = document.getElementById("btnGuardar");
+  const oldText = btnGuardar ? btnGuardar.textContent : "";
+
+  try {
+    if (btnGuardar) {
+      btnGuardar.disabled = true;
+      btnGuardar.textContent = "Guardando...";
+    }
+    setStatus("Guardando flujo real...");
+
+    const res = await fetch(`${API_BASE}/valores/guardar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(filas)
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(txt || `HTTP ${res.status}`);
+    }
+
+    setStatus("Flujo real guardado correctamente.");
+    alert("Flujo de caja real guardado correctamente ✅");
+  } catch (err) {
+    console.error("Error al guardar flujo real:", err);
+    setStatus("Error al guardar flujo real.");
+    alert("Ocurrió un error al guardar el flujo real.");
+  } finally {
+    if (btnGuardar) {
+      btnGuardar.disabled = false;
+      btnGuardar.textContent = oldText || "Guardar";
+    }
+  }
+}
+async function guardarTodosLosAnios() {
+  if (!proyectoSeleccionado) {
+    alert("Seleccione un proyecto primero.");
+    return;
+  }
+
+  const { annoIni, annoFin } = proyectoSeleccionado;
+  if (!annoIni || !annoFin || annoIni > annoFin) {
+    alert("Rango de años inválido para el proyecto.");
+    return;
+  }
+
+  const filas = [];
+  for (let anio = annoIni; anio <= annoFin; anio++) {
+    filas.push(...construirFilasParaAnno(anio));
+  }
+
+  if (!filas.length) {
+    alert("No hay filas para guardar.");
+    return;
+  }
+
+  const btnGuardarTodos = document.getElementById("btnGuardarTodos");
+  const oldText = btnGuardarTodos ? btnGuardarTodos.textContent : "";
+
+  try {
+    if (btnGuardarTodos) {
+      btnGuardarTodos.disabled = true;
+      btnGuardarTodos.textContent = "Guardando...";
+    }
+    setStatus("Guardando flujo real de todos los años...");
+
+    const res = await fetch(`${API_BASE}/valores/guardar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(filas)
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(txt || `HTTP ${res.status}`);
+    }
+
+    setStatus("Flujo real de todos los años guardado correctamente.");
+    alert("Flujo real de todos los años guardado correctamente ✅");
+  } catch (err) {
+    console.error("Error al guardar todos los años:", err);
+    setStatus("Error al guardar todos los años.");
+    alert("Ocurrió un error al guardar todos los años.");
+  } finally {
+    if (btnGuardarTodos) {
+      btnGuardarTodos.disabled = false;
+      btnGuardarTodos.textContent = oldText || "Guardar todos";
+    }
+  }
+}
+// Inicialización final (usa la versión que detecta la página)
+async function initRealFlow() {
+  const tieneTablaFlujoReal =
+    document.getElementById("headerRow") &&
+    document.getElementById("bodyRows");
+
+  if (tieneTablaFlujoReal) {
+    crearHeaderTabla();
+    agregarFilasBase();
+    setupEventListeners();
+  }
+}
+
+document.addEventListener("DOMContentLoaded", initRealFlow);

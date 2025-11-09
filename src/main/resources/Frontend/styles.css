@@ -1,0 +1,661 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background-color: #1a1a1a;
+  color: white;
+  padding: 20px;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 30px;
+  font-size: 2.5em;
+  color: #ffffff;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.controls-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #2d2d2d;
+  border-radius: 8px;
+}
+
+.left-controls {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.right-controls {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+select,
+input,
+button {
+  padding: 8px 12px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background-color: #3d3d3d;
+  color: white;
+  font-size: 14px;
+}
+
+select:focus,
+input:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+button {
+  background-color: #007bff;
+  border: 1px solid #007bff;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+/* Agregar estilos para los inputs readonly de fecha */
+input[type="date"]:read-only {
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+.date-label {
+  font-weight: bold;
+  margin-right: 5px;
+}
+
+.table-container {
+  overflow-x: auto;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #2d2d2d;
+  min-width: 1200px;
+}
+
+th,
+td {
+  border: 1px solid #555;
+  padding: 12px 8px;
+  text-align: center;
+  font-size: 13px;
+}
+
+th {
+  background-color: #1a1a1a;
+  color: white;
+  font-weight: bold;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+td {
+  background-color: #3d3d3d;
+  color: white;
+}
+
+.concepto-column {
+  text-align: left;
+  min-width: 150px;
+  max-width: 200px;
+}
+
+.month-column {
+  min-width: 80px;
+}
+
+.suma-column,
+.acum-column,
+.total-column {
+  min-width: 90px;
+  background-color: #4a4a4a;
+  font-weight: bold;
+}
+
+/* Estilos para las filas separadoras */
+.separator-row {
+  background-color: #1a1a1a;
+}
+
+.separator-cell {
+  background-color: #404040;
+  color: white;
+  font-weight: bold;
+  text-align: left;
+  border: 1px solid #555;
+}
+
+.separator-row.separator-neto .separator-cell {
+  background-color: #2d5a2d;
+}
+
+/* Contenedor centrado para los tres botones */
+.buttons-container {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  padding: 20px;
+}
+
+.concepto-btn {
+  background-color: #28a745;
+  border: 1px solid #28a745;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: bold;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.concepto-btn:hover {
+  background-color: #218838;
+}
+
+.editable-cell {
+  background-color: #4d4d4d;
+  cursor: text;
+}
+
+.editable-cell:hover {
+  background-color: #5d5d5d;
+}
+
+input[type="number"] {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: white;
+  text-align: center;
+  padding: 4px;
+}
+
+input[type="number"]:focus {
+  outline: 2px solid #007bff;
+  border-radius: 2px;
+}
+
+@media (max-width: 768px) {
+  .controls-container {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .left-controls,
+  .right-controls {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .buttons-container {
+    flex-direction: column;
+  }
+
+  .concepto-btn {
+    width: 100%;
+  }
+  .table-container {
+    overflow-x: auto !important;
+    scrollbar-color: #888 #222; /* color opcional */
+    scrollbar-width: thin;
+  }
+
+  .table-container::-webkit-scrollbar {
+    height: 10px;
+  }
+
+  .table-container::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 10px;
+  }
+
+  .table-container::-webkit-scrollbar-thumb:hover {
+    background: #888;
+  }
+}
+
+/* --- Extras mínimos para lo nuevo del HTML/JS --- */
+#proyectoInfo {
+  margin: 6px 0 10px;
+  font-weight: 600;
+  color: #9ad1ff;            /* se lee sobre el fondo oscuro */
+}
+
+#statusMsg {
+  margin: 8px 0 12px;
+  font-size: 0.95rem;
+  color: #ddd;               /* mensaje neutral */
+}
+
+/* (opcional, útil): fijar la 1ra columna para tablas anchas */
+.concepto-column,
+#bodyRows > tr > td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 11;               /* sobre celdas vecinas */
+  background-color: #3d3d3d; /* mismo fondo de td */
+  text-align: left;
+}
+
+.btn-off {
+  background-color: #6c757d;
+  border-color: #6c757d;
+}
+
+.btn-off:hover {
+  background-color: #5a6268;
+  border-color: #545b62;
+}
+
+/* ============================
+   Tema claro para Flujo de Caja Real
+   Se aplica solo cuando <body class="real-body">
+   ============================ */
+
+.real-body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* 🔁 AJUSTE: usamos el mismo fondo degradado que el home */
+  background: linear-gradient(135deg, #f0f4ff, #e6ecff);
+  color: #111827;
+  padding: 40px 24px 24px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Contenedor principal */
+
+.real-body .container {
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto 24px;
+  background-color: #ffffff;
+  padding: 20px 22px 18px;
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+/* Título */
+
+.real-body h1 {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: #111827;
+  text-align: center;
+}
+
+/* Info de proyecto seleccionado */
+
+.real-body #proyectoInfo {
+  margin: 4px 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+/* Controles superiores */
+
+.real-body .controls-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background-color: #f9fafb;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+}
+
+.real-body .left-controls,
+.real-body .right-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.real-body .left-controls select,
+.real-body .right-controls input[type="date"] {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  background-color: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  min-width: 160px;
+}
+
+.real-body .left-controls select:focus,
+.real-body .right-controls input[type="date"]:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+
+.real-body .date-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* Mensajes de estado */
+
+.real-body #statusMsg {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  color: #2563eb;
+}
+
+/* Tabla (contenedor con scroll) */
+
+.real-body .table-container {
+  margin-top: 4px;
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  background-color: #ffffff;
+}
+
+/* Tabla */
+
+.real-body #tablaFlujo {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1200px;
+  font-size: 12px;
+}
+
+/* ✅ AJUSTE CLAVE:
+   Forzamos texto de encabezados y celdas en color oscuro
+   para que los conceptos no se vean blancos. */
+.real-body #tablaFlujo th,
+.real-body #tablaFlujo td {
+  padding: 8px 6px;
+  border: 1px solid #e5e7eb;
+  text-align: center;
+  color: #111827;
+}
+
+.real-body #tablaFlujo th {
+  background-color: #f9fafb;
+  color: #6b7280;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.real-body #tablaFlujo tbody tr:nth-child(even) td {
+  background-color: #fdfdfd;
+}
+
+/* Columnas especiales */
+
+.real-body .concepto-column {
+  text-align: left;
+  min-width: 200px;
+  font-weight: 600;
+  color: #111827; /* aseguramos negro en conceptos */
+}
+
+.real-body .month-column {
+  min-width: 80px;
+}
+
+.real-body .suma-column,
+.real-body .acum-column,
+.real-body .total-column {
+  font-weight: 600;
+}
+
+/* Filas separadoras (INGRESOS, EGRESOS, NETO) */
+
+.real-body .separator-row td {
+  background-color: #eff6ff;
+  color: #1f2937;
+  font-weight: 700;
+  text-align: left;
+  border-color: #bfdbfe;
+}
+
+.real-body .separator-neto td {
+  background-color: #ecfdf5;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+/* Celdas de números editables */
+
+.real-body #tablaFlujo input[type="number"] {
+  width: 90%;
+  padding: 5px 4px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  font-size: 11px;
+  text-align: right;
+  background-color: #ffffff;
+  color: #111827;
+}
+
+.real-body #tablaFlujo input[type="number"]:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.14);
+}
+
+/* Botones inferiores */
+
+.real-body .buttons-container {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.real-body .concepto-btn {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #2563eb;
+  background-color: #2563eb;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+}
+
+.real-body .concepto-btn:hover {
+  background-color: #1d4ed8;
+  border-color: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.real-body .btn-off {
+  background-color: #e5e7eb;
+  border-color: #d1d5db;
+  color: #374151;
+  box-shadow: none;
+}
+
+.real-body .btn-off:hover {
+  background-color: #d1d5db;
+  border-color: #cbd5f5;
+}
+
+/* Footer - mismo estilo que el home */
+
+.real-body footer {
+  margin-top: auto;
+  padding: 8px 0 4px;
+  font-size: 0.85rem;
+  color: #6b7280;
+  text-align: center;
+  opacity: 0.9;
+}
+
+/* Responsive */
+
+@media (max-width: 900px) {
+  .real-body .controls-container {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .real-body .left-controls,
+  .real-body .right-controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .real-body .buttons-container {
+    justify-content: flex-start;
+  }
+}
+
+/* === Overrides visuales solicitados === */
+
+/* Fondo general blanco para el módulo real */
+.real-body {
+  background: #ffffff;
+}
+
+/* Tabla totalmente blanca con texto negro */
+.real-body #tablaFlujo th,
+.real-body #tablaFlujo td {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+/* Quitar zebra gris si estaba molestando */
+.real-body #tablaFlujo tbody tr:nth-child(even) td {
+  background-color: #ffffff !important;
+}
+
+/* Filas separadoras: solo tipografía fuerte y borde, sin fondo oscuro */
+.real-body .separator-row td,
+.real-body .separator-neto td {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  font-weight: 700;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+/* Columna de concepto: mantiene texto negro y alineado a la izquierda */
+.real-body .concepto-column {
+  color: #000000 !important;
+}
+
+/* Centrar los botones inferiores */
+.real-body .buttons-container {
+  display: flex;
+  justify-content: center !important;  /* 👈 centrado horizontal */
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+
+/* ============================
+   Flujo de Caja Proyectado
+   (misma visual que Flujo Real)
+   ============================ */
+
+.real-body #tablaFlujoProy {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1200px;
+  font-size: 12px;
+}
+
+/* Encabezados y celdas */
+.real-body #tablaFlujoProy th,
+.real-body #tablaFlujoProy td {
+  padding: 8px 6px;
+  border: 1px solid #e5e7eb;
+  text-align: center;
+  background-color: #ffffff;
+  color: #000000;
+}
+
+/* Encabezado */
+.real-body #tablaFlujoProy th {
+  background-color: #f9fafb;
+  color: #6b7280;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+/* Columnas especiales */
+.real-body #tablaFlujoProy .concepto-column {
+  text-align: left;
+  min-width: 200px;
+  font-weight: 600;
+  color: #000000;
+}
+
+.real-body #tablaFlujoProy .month-column {
+  min-width: 80px;
+}
+
+.real-body #tablaFlujoProy .suma-column,
+.real-body #tablaFlujoProy .acum-column,
+.real-body #tablaFlujoProy .total-column {
+  font-weight: 600;
+}
+
+/* Filas separadoras ING/EGR/NETO */
+.real-body #tablaFlujoProy .separator-row td,
+.real-body #tablaFlujoProy .separator-neto td {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  font-weight: 700;
+  text-align: left;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+/* Clave visual: texto de cabeceras ING/EGRESOS/NETO a la izquierda */
+.real-body #tablaFlujoProy .separator-cell,
+.real-body #tablaFlujoProy .separator-row td:first-child {
+  text-align: left;
+  padding-left: 12px;
+}
+
+/* Solo centrar los números en la fila de FLUJO DE CAJA NETO */
+#tablaFlujoProy .separator-neto td:not(.separator-cell) {
+  text-align: center !important;
+  vertical-align: middle;
+}
+
