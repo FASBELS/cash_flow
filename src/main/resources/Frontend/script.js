@@ -11,6 +11,10 @@ let conceptosCargados = { ingresos: [], egresos: [] };
 let proyectoSeleccionado = null;
 let annoSeleccionado = null;
 
+// Mapa para comparar contra flujo proyectado
+let mapaProyectado = {};
+let comparacionActiva = false; // toggle del botón
+
 // --- referencias de la UI ---
 const proyectoInfoEl = document.getElementById("proyectoInfo");
 const codCiaHidden   = document.getElementById("codCiaHidden");
@@ -23,7 +27,6 @@ function setStatus(msg) {
 
 // (esta primera init queda sobrescrita por la de abajo, pero la mantengo intacta)
 async function init() {
-  // await cargarProyectos();
   crearHeaderTabla();
   agregarFilasBase();
   setupEventListeners();
@@ -84,6 +87,8 @@ function resetTabla(resetProyecto = false) {
   conceptosCargados = { ingresos: [], egresos: [] };
   proyectoSeleccionado = null;
   annoSeleccionado = null;
+  mapaProyectado = {};
+  comparacionActiva = false;
 
   if (resetProyecto) {
     document.getElementById("selectProyecto").value = "";
@@ -94,6 +99,10 @@ function resetTabla(resetProyecto = false) {
     if (codPytoHidden) codPytoHidden.value = "";
     setStatus("");
   }
+
+  // 🆕 al resetear tabla, también reseteamos comparación visual
+  resetComparacionVisual();
+
   agregarFilasBase();
 }
 
@@ -108,7 +117,6 @@ async function cargarProyectos() {
 
     proyectos.forEach((p) => {
       const opt = document.createElement("option");
-      // MOD: el endpoint /api/proyectos no trae codCia; y en backend codCia=1 y nroVersion=1 son fijos.
       opt.value = String(p.codPyto);
       opt.textContent = p.nombPyto;
       opt.dataset.annoIni = p.annoIni;
@@ -125,7 +133,6 @@ async function cargarProyectos() {
 }
 
 function setupEventListeners() {
-
   const selectProyecto = document.getElementById("selectProyecto");
   if (!selectProyecto) {
     // No es pantalla de flujo real
@@ -309,19 +316,71 @@ function setupEventListeners() {
     });
   }
 
-  // 🆕 LISTENER: Botón Guardar
+  // Botón Guardar
   const btnGuardar = document.getElementById("btnGuardar");
   if (btnGuardar) {
     btnGuardar.addEventListener("click", guardarFlujoReal);
   }
-  // 🆕 LISTENER: Botón Guardar todos los años
+
+  // Botón Guardar todos los años
   const btnGuardarTodos = document.getElementById("btnGuardarTodos");
   if (btnGuardarTodos) {
     btnGuardarTodos.addEventListener("click", guardarTodosLosAnios);
   }
+
+  // 🆕 Botón Ver diferencias con el proyectado (toggle)
+  const btnComparar = document.getElementById("btnComparar");
+  if (btnComparar) {
+    btnComparar.addEventListener("click", async () => {
+      if (!proyectoSeleccionado || !annoSeleccionado) {
+        alert("Seleccione proyecto y año primero.");
+        return;
+      }
+      if (!conceptosCargados.ingresos.length && !conceptosCargados.egresos.length) {
+        alert("Primero cargue los conceptos.");
+        return;
+      }
+
+      // Activar comparación
+      if (!comparacionActiva) {
+        btnComparar.disabled = true;
+        const old = btnComparar.textContent;
+        btnComparar.textContent = "Comparando...";
+
+        try {
+          await cargarMapaProyectado(
+            proyectoSeleccionado.codCia,
+            proyectoSeleccionado.codPyto,
+            annoSeleccionado
+          );
+
+          if (!mapaProyectado || Object.keys(mapaProyectado).length === 0) {
+            alert("No se encontraron valores proyectados para este proyecto y año.");
+            btnComparar.textContent = old;
+          } else {
+            aplicarComparacionCeldas();
+            comparacionActiva = true;
+            btnComparar.textContent = "Ocultar diferencias";
+          }
+        } catch (e) {
+          console.error("Error al comparar con proyectado:", e);
+          alert("Error al comparar con el proyectado.");
+          btnComparar.textContent = old;
+        } finally {
+          btnComparar.disabled = false;
+        }
+
+      // Desactivar comparación
+      } else {
+        limpiarComparacionCeldas();
+        comparacionActiva = false;
+        btnComparar.textContent = "Ver diferencias con el proyectado";
+      }
+    });
+  }
 }
 
-// MOD: backend asume codCia=1 y nroVersion=1 → solo enviamos codPyto
+// Cargar conceptos
 async function cargarConceptos(codPyto) {
   try {
     const url = `${API_BASE}/conceptos?codPyto=${codPyto}`;
@@ -331,7 +390,6 @@ async function cargarConceptos(codPyto) {
       const text = await res.text().catch(() => "");
       throw new Error(`HTTP ${res.status} ${res.statusText} ${text}`);
     }
-    /** @type {{ingEgr:"I"|"E",codPartida:number,desPartida:string,nivel:number,orden?:number|null}[]} */
     const data = await res.json();
 
     const ingresos = data
@@ -358,7 +416,7 @@ function renderConceptos() {
 
   // INGRESOS header
   const trIngHeader = document.createElement("tr");
-  trIngHeader.classList.add("separator-row");          // ✅ separador oscuro
+  trIngHeader.classList.add("separator-row");
   const tdIng = document.createElement("td");
   tdIng.colSpan = 16;
   tdIng.textContent = "INGRESOS";
@@ -366,12 +424,12 @@ function renderConceptos() {
   tbody.appendChild(trIngHeader);
 
   conceptosCargados.ingresos.forEach((p) => {
-    tbody.appendChild(crearFilaPartida(p));            // filas claras
+    tbody.appendChild(crearFilaPartida(p));
   });
 
   // EGRESOS header
   const trEgrHeader = document.createElement("tr");
-  trEgrHeader.classList.add("separator-row");          // ✅ separador oscuro
+  trEgrHeader.classList.add("separator-row");
   const tdEgr = document.createElement("td");
   tdEgr.colSpan = 16;
   tdEgr.textContent = "EGRESOS";
@@ -379,12 +437,12 @@ function renderConceptos() {
   tbody.appendChild(trEgrHeader);
 
   conceptosCargados.egresos.forEach((p) => {
-    tbody.appendChild(crearFilaPartida(p));            // filas claras
+    tbody.appendChild(crearFilaPartida(p));
   });
 
   // NETO
   const trNet = document.createElement("tr");
-  trNet.classList.add("separator-neto");               // ✅ separador neto
+  trNet.classList.add("separator-neto");
   const tdNet = document.createElement("td");
   tdNet.textContent = "FLUJO DE CAJA NETO";
   trNet.appendChild(tdNet);
@@ -405,20 +463,19 @@ function renderConceptos() {
   }
 }
 
-// 🔹 MODIFICADO: marcar la fila con info mínima para el guardado
+// Crear fila de partida
 function crearFilaPartida(partida) {
   const tr = document.createElement("tr");
-  tr.classList.add("data-row");                 // 🔹 NUEVO: identifica filas de datos
+  tr.classList.add("data-row");
   if (partida.ingEgr) {
-    tr.dataset.ingEgr = partida.ingEgr;         // 🔹 NUEVO: I / E para el backend
+    tr.dataset.ingEgr = partida.ingEgr;
   }
 
   const tdConcepto = document.createElement("td");
   tdConcepto.textContent = partida.desPartida;
   tdConcepto.dataset.codPartida = partida.codPartida;
-  tdConcepto.classList.add("concepto-column");  // ✅ marca como fila de concepto (clara)
+  tdConcepto.classList.add("concepto-column");
 
-  // sangría por nivel (si viene desde backend)
   if (typeof partida.nivel === "number" && !isNaN(partida.nivel)) {
     tdConcepto.style.paddingLeft = `${Math.max(0, partida.nivel - 1) * 16}px`;
   }
@@ -430,12 +487,131 @@ function crearFilaPartida(partida) {
     td.textContent = "0";
     td.dataset.codPartida = partida.codPartida;
     td.dataset.colIndex = i;
+    if (i < 12) {
+      td.dataset.mes = i + 1;
+    }
     tr.appendChild(td);
   }
   return tr;
 }
 
-// === EXISTENTE: cargar valores reales para un año y pintar la tabla actual ===
+// === CARGAR PROYECTADO PARA COMPARAR ===
+// Usa FlujoProyectadoController: /api/flujo-proyectado/valores
+async function cargarMapaProyectado(codCia, codPyto, anno) {
+  mapaProyectado = {};
+
+  const url = `${API_BASE}/flujo-proyectado/valores?codCia=${codCia}&codPyto=${codPyto}&anno=${anno}`;
+  console.log("[COMPARE] Fetch proyectado:", url);
+
+  const res = await fetch(url, { mode: "cors" });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    console.warn("[COMPARE] No se pudo cargar flujo proyectado:", txt || `HTTP ${res.status}`);
+    return;
+  }
+
+  const data = await res.json();
+  console.log("[COMPARE] Proyectado crudo:", data);
+
+  const nuevoMapa = {};
+
+  data.forEach(row => {
+    if (!row || !row.codPartida) return;
+
+    const codPartida = Number(row.codPartida);
+    if (!codPartida) return;
+
+    const meses = row.valores && Array.isArray(row.valores.mes)
+      ? row.valores.mes
+      : [];
+
+    for (let i = 0; i < 12; i++) {
+      const mes = i + 1;
+      const v = Number(meses[i] || 0);
+      if (!isNaN(v)) {
+        const key = `${codPartida}_${mes}`;
+        nuevoMapa[key] = (nuevoMapa[key] || 0) + v;
+      }
+    }
+  });
+
+  mapaProyectado = nuevoMapa;
+  console.log("[COMPARE] mapaProyectado:", mapaProyectado);
+}
+
+// === APLICAR / LIMPIAR COLORES POR COMPARACIÓN ===
+function actualizarEstiloCeldaComparacion(celdaEl, codPartida, mes) {
+  if (!celdaEl || !codPartida || !mes) return;
+
+  // limpiar estilo previo (incluyendo posibles !important)
+  celdaEl.style.removeProperty("color");
+  celdaEl.style.fontWeight = "";
+
+  const key = `${codPartida}_${mes}`;
+  if (!(key in mapaProyectado)) return;
+
+  const valorProy = Number(mapaProyectado[key]) || 0;
+  const txt = (celdaEl.textContent || "").replace(/,/g, "").trim();
+  const valorReal = Number(txt || 0);
+  if (!isFinite(valorReal)) return;
+
+  if (valorReal > valorProy) {
+    celdaEl.style.setProperty("color", "red", "important");
+    celdaEl.style.fontWeight = "600";
+  } else if (valorReal < valorProy) {
+    celdaEl.style.setProperty("color", "green", "important");
+    celdaEl.style.fontWeight = "600";
+  }
+  // igual: sin cambios
+}
+
+function aplicarComparacionCeldas() {
+  if (!mapaProyectado || Object.keys(mapaProyectado).length === 0) {
+    console.log("[COMPARE] Sin datos proyectados -> no se colorea.");
+    return;
+  }
+
+  const tbody = document.getElementById("bodyRows");
+  if (!tbody) return;
+
+  const rows = tbody.querySelectorAll("tr.data-row");
+  rows.forEach(tr => {
+    const conceptoCell = tr.querySelector("td.concepto-column");
+    if (!conceptoCell) return;
+
+    const codPartida = parseInt(conceptoCell.dataset.codPartida, 10);
+    if (!codPartida) return;
+
+    const celdasMes = tr.querySelectorAll("td[data-mes]");
+    celdasMes.forEach(td => {
+      const mes = parseInt(td.dataset.mes, 10);
+      actualizarEstiloCeldaComparacion(td, codPartida, mes);
+    });
+  });
+}
+
+function limpiarComparacionCeldas() {
+  const tbody = document.getElementById("bodyRows");
+  if (!tbody) return;
+  const celdas = tbody.querySelectorAll("tr.data-row td[data-mes]");
+  celdas.forEach(td => {
+    td.style.removeProperty("color");
+    td.style.fontWeight = "";
+  });
+}
+
+// 🆕 Helper: resetear estado visual de comparación (texto + colores + mapa)
+function resetComparacionVisual() {
+  const btnComparar = document.getElementById("btnComparar");
+  comparacionActiva = false;
+  mapaProyectado = {};
+  if (btnComparar) {
+    btnComparar.textContent = "Ver diferencias con el proyectado";
+  }
+  limpiarComparacionCeldas();
+}
+
+// === cargar valores reales para un año y pintar la tabla actual ===
 async function cargarValoresReales(codCia, codPyto, anno) {
   if (!conceptosCargados.ingresos.length && !conceptosCargados.egresos.length) {
     setStatus("Primero carga los conceptos (botón 'Concepto').");
@@ -451,6 +627,8 @@ async function cargarValoresReales(codCia, codPyto, anno) {
   const data = await res.json();
 
   resetCeldasNumericas();
+  // 🆕 cada vez que cambio de año/valores, apago la comparación y dejo el botón coherente
+  resetComparacionVisual();
 
   data.forEach(row => {
     if (row.ingEgr === "N" || row.codPartida === 0) {
@@ -459,6 +637,8 @@ async function cargarValoresReales(codCia, codPyto, anno) {
       pintarFilaPartidaValores(row.codPartida, row.valores);
     }
   });
+
+  // Las diferencias solo se muestran cuando el usuario presiona el botón
 }
 
 function resetCeldasNumericas() {
@@ -467,7 +647,12 @@ function resetCeldasNumericas() {
   tbody.querySelectorAll("tr").forEach(tr => {
     const tds = Array.from(tr.querySelectorAll("td"));
     if (tds.length >= 16) {
-      for (let i = 1; i < tds.length; i++) tds[i].textContent = "0";
+      for (let i = 1; i < tds.length; i++) {
+        const td = tds[i];
+        td.textContent = "0";
+        td.style.removeProperty("color");
+        td.style.fontWeight = "";
+      }
     }
   });
 }
@@ -521,7 +706,7 @@ function formatNumber(n) {
   return isFinite(num) ? num.toFixed(2) : "0.00";
 }
 
-// 🆕 NUEVO: arma las filas para un año dado usando la tabla actual (año visible)
+// arma las filas para un año dado usando la tabla actual (año visible)
 function construirFilasParaAnno(anio) {
   const tbody = document.getElementById("bodyRows");
   const filas = [];
@@ -542,7 +727,6 @@ function construirFilasParaAnno(anio) {
     const tds = tr.querySelectorAll("td");
     const impRealMes = [];
 
-    // columnas 1..12 = meses
     for (let i = 1; i <= 12 && i < tds.length; i++) {
       const txt = (tds[i].textContent || "").replace(/,/g, "").trim();
       const num = parseFloat(txt);
@@ -567,9 +751,7 @@ function construirFilasParaAnno(anio) {
   return filas;
 }
 
-// 🆕 NUEVO: arma las filas para un año dado consultando directamente al backend
-// Esto permite que "Guardar todos" tome los valores correctos de 2024, 2025, etc.
-// aunque solo tengas en pantalla el 2023.
+// arma las filas para un año dado consultando directamente al backend
 async function construirFilasParaAnnoDesdeBackend(anio) {
   if (!proyectoSeleccionado) return [];
   const url = `${API_BASE}/valores/real?codCia=${proyectoSeleccionado.codCia}&codPyto=${proyectoSeleccionado.codPyto}&anno=${anio}`;
@@ -587,7 +769,6 @@ async function construirFilasParaAnnoDesdeBackend(anio) {
     let orden = 1;
 
     data.forEach(row => {
-      // ignoramos filas de neto u otras auxiliares
       if (row.ingEgr === "N" || row.codPartida === 0) return;
 
       const codPartida = parseInt(row.codPartida, 10);
@@ -626,7 +807,7 @@ async function construirFilasParaAnnoDesdeBackend(anio) {
   }
 }
 
-// === EXISTENTE: guardar solo el año visible ===
+// guardar solo el año visible
 async function guardarFlujoReal() {
   if (!proyectoSeleccionado || !annoSeleccionado) {
     alert("Seleccione proyecto y año antes de guardar.");
@@ -681,9 +862,7 @@ async function guardarFlujoReal() {
   }
 }
 
-// 🆕 MODIFICADO: Guardar TODOS los años usando:
-// - pantalla para el año visible
-// - backend para los demás años
+// Guardar TODOS los años
 async function guardarTodosLosAnios() {
   if (!proyectoSeleccionado) {
     alert("Seleccione un proyecto primero.");
@@ -710,10 +889,8 @@ async function guardarTodosLosAnios() {
 
     for (let anio = annoIni; anio <= annoFin; anio++) {
       if (anio === annoSeleccionado) {
-        // Año visible: usa lo que está en la grilla (incluye cambios del usuario)
         filas.push(...construirFilasParaAnno(anio));
       } else {
-        // Otros años: se consultan directamente al backend
         const filasAnno = await construirFilasParaAnnoDesdeBackend(anio);
         filas.push(...filasAnno);
       }
@@ -750,7 +927,7 @@ async function guardarTodosLosAnios() {
   }
 }
 
-// Inicialización final (usa la versión que detecta la página)
+// Inicialización final
 async function initRealFlow() {
   const tieneTablaFlujoReal =
     document.getElementById("headerRow") &&
