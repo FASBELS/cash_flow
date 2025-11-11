@@ -435,7 +435,7 @@ function crearFilaPartida(partida) {
   return tr;
 }
 
-// === NUEVO: cargar valores reales desde el backend y pintar la tabla ===
+// === EXISTENTE: cargar valores reales para un año y pintar la tabla actual ===
 async function cargarValoresReales(codCia, codPyto, anno) {
   if (!conceptosCargados.ingresos.length && !conceptosCargados.egresos.length) {
     setStatus("Primero carga los conceptos (botón 'Concepto').");
@@ -521,7 +521,7 @@ function formatNumber(n) {
   return isFinite(num) ? num.toFixed(2) : "0.00";
 }
 
-// 🆕 NUEVO: arma las filas para un año dado usando la tabla actual
+// 🆕 NUEVO: arma las filas para un año dado usando la tabla actual (año visible)
 function construirFilasParaAnno(anio) {
   const tbody = document.getElementById("bodyRows");
   const filas = [];
@@ -549,6 +549,9 @@ function construirFilasParaAnno(anio) {
       impRealMes.push(isNaN(num) ? 0 : num);
     }
 
+    const tieneDatos = impRealMes.some(v => v !== 0);
+    if (!tieneDatos) return;
+
     filas.push({
       anno: anio,
       codCia: proyectoSeleccionado.codCia,
@@ -564,7 +567,66 @@ function construirFilasParaAnno(anio) {
   return filas;
 }
 
-// 🆕 NUEVO: arma el payload y llama al backend /valores/real/guardar
+// 🆕 NUEVO: arma las filas para un año dado consultando directamente al backend
+// Esto permite que "Guardar todos" tome los valores correctos de 2024, 2025, etc.
+// aunque solo tengas en pantalla el 2023.
+async function construirFilasParaAnnoDesdeBackend(anio) {
+  if (!proyectoSeleccionado) return [];
+  const url = `${API_BASE}/valores/real?codCia=${proyectoSeleccionado.codCia}&codPyto=${proyectoSeleccionado.codPyto}&anno=${anio}`;
+
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      console.error(`Error al obtener valores para el año ${anio}:`, txt || `HTTP ${res.status}`);
+      return [];
+    }
+
+    const data = await res.json();
+    const filas = [];
+    let orden = 1;
+
+    data.forEach(row => {
+      // ignoramos filas de neto u otras auxiliares
+      if (row.ingEgr === "N" || row.codPartida === 0) return;
+
+      const codPartida = parseInt(row.codPartida, 10);
+      const ingEgr = row.ingEgr || "";
+      if (!codPartida || !ingEgr) return;
+
+      const meses = (row.valores && Array.isArray(row.valores.mes))
+        ? row.valores.mes
+        : [];
+
+      const impRealMes = [];
+      for (let i = 0; i < 12; i++) {
+        const v = Number(meses[i] || 0);
+        impRealMes.push(isNaN(v) ? 0 : v);
+      }
+
+      const tieneDatos = impRealMes.some(v => v !== 0);
+      if (!tieneDatos) return;
+
+      filas.push({
+        anno: anio,
+        codCia: proyectoSeleccionado.codCia,
+        codPyto: proyectoSeleccionado.codPyto,
+        ingEgr,
+        tipo: "R",
+        codPartida,
+        orden: orden++,
+        impRealMes
+      });
+    });
+
+    return filas;
+  } catch (err) {
+    console.error(`Error al construir filas desde backend para el año ${anio}:`, err);
+    return [];
+  }
+}
+
+// === EXISTENTE: guardar solo el año visible ===
 async function guardarFlujoReal() {
   if (!proyectoSeleccionado || !annoSeleccionado) {
     alert("Seleccione proyecto y año antes de guardar.");
@@ -577,40 +639,7 @@ async function guardarFlujoReal() {
     return;
   }
 
-  const filas = [];
-  let orden = 1;
-
-  const rows = tbody.querySelectorAll("tr.data-row");
-  rows.forEach(tr => {
-    const first = tr.querySelector("td");
-    if (!first) return;
-
-    const codPartida = parseInt(first.dataset.codPartida || tr.dataset.codPartida, 10);
-    const ingEgr = tr.dataset.ingEgr || "";   // viene desde crearFilaPartida
-
-    if (!codPartida || !ingEgr) return;
-
-    const tds = tr.querySelectorAll("td");
-    const impRealMes = [];
-
-    // columnas 1..12 = meses
-    for (let i = 1; i <= 12 && i < tds.length; i++) {
-      const txt = (tds[i].textContent || "").replace(/,/g, "").trim();
-      const num = parseFloat(txt);
-      impRealMes.push(isNaN(num) ? 0 : num);
-    }
-
-    filas.push({
-      anno: annoSeleccionado,
-      codCia: proyectoSeleccionado.codCia,
-      codPyto: proyectoSeleccionado.codPyto,
-      ingEgr: ingEgr,
-      tipo: "R",
-      codPartida: codPartida,
-      orden: orden++,
-      impRealMes: impRealMes
-    });
-  });
+  const filas = construirFilasParaAnno(annoSeleccionado);
 
   if (!filas.length) {
     alert("No hay filas de valores para guardar.");
@@ -651,6 +680,10 @@ async function guardarFlujoReal() {
     }
   }
 }
+
+// 🆕 MODIFICADO: Guardar TODOS los años usando:
+// - pantalla para el año visible
+// - backend para los demás años
 async function guardarTodosLosAnios() {
   if (!proyectoSeleccionado) {
     alert("Seleccione un proyecto primero.");
@@ -663,18 +696,10 @@ async function guardarTodosLosAnios() {
     return;
   }
 
-  const filas = [];
-  for (let anio = annoIni; anio <= annoFin; anio++) {
-    filas.push(...construirFilasParaAnno(anio));
-  }
-
-  if (!filas.length) {
-    alert("No hay filas para guardar.");
-    return;
-  }
-
   const btnGuardarTodos = document.getElementById("btnGuardarTodos");
   const oldText = btnGuardarTodos ? btnGuardarTodos.textContent : "";
+
+  const filas = [];
 
   try {
     if (btnGuardarTodos) {
@@ -682,6 +707,23 @@ async function guardarTodosLosAnios() {
       btnGuardarTodos.textContent = "Guardando...";
     }
     setStatus("Guardando flujo real de todos los años...");
+
+    for (let anio = annoIni; anio <= annoFin; anio++) {
+      if (anio === annoSeleccionado) {
+        // Año visible: usa lo que está en la grilla (incluye cambios del usuario)
+        filas.push(...construirFilasParaAnno(anio));
+      } else {
+        // Otros años: se consultan directamente al backend
+        const filasAnno = await construirFilasParaAnnoDesdeBackend(anio);
+        filas.push(...filasAnno);
+      }
+    }
+
+    if (!filas.length) {
+      alert("No hay filas para guardar.");
+      setStatus("No hay datos para guardar en ningún año.");
+      return;
+    }
 
     const res = await fetch(`${API_BASE}/valores/guardar`, {
       method: "POST",
@@ -707,6 +749,7 @@ async function guardarTodosLosAnios() {
     }
   }
 }
+
 // Inicialización final (usa la versión que detecta la página)
 async function initRealFlow() {
   const tieneTablaFlujoReal =
