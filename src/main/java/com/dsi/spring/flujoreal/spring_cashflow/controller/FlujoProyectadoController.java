@@ -7,11 +7,14 @@ import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;          // 👈 NUEVO
+import org.springframework.web.bind.annotation.RequestBody;     // 👈 NUEVO
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.dsi.spring.flujoreal.spring_cashflow.dto.FilaFlujoDTO;
+import com.dsi.spring.flujoreal.spring_cashflow.dto.FlujoCajaDetProySaveDTO; // 👈 NUEVO
 import com.dsi.spring.flujoreal.spring_cashflow.service.FlujoProyectadoService;
 
 @RestController
@@ -56,6 +59,31 @@ public class FlujoProyectadoController {
                     .status(500)
                     .body(Map.of(
                             "error", "Error al obtener el flujo de caja proyectado",
+                            "detalle", e.getMessage()
+                    ));
+        }
+    }
+
+    /**
+     * 🔹 NUEVO:
+     * Guarda las filas del flujo de caja proyectado que vienen del frontend.
+     * Deben corresponder al año que el usuario tiene en pantalla.
+     */
+    @PostMapping("/guardar")
+    public ResponseEntity<?> guardarFlujoProyectado(
+            @RequestBody List<FlujoCajaDetProySaveDTO> filas
+    ) {
+        try {
+            flujoProyectadoService.guardar(filas);
+            return ResponseEntity.ok(
+                    Map.of("mensaje", "Flujo de caja proyectado guardado correctamente")
+            );
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity
+                    .status(500)
+                    .body(Map.of(
+                            "error", "Error al guardar el flujo de caja proyectado",
                             "detalle", e.getMessage()
                     ));
         }

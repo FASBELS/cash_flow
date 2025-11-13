@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.dsi.spring.flujoreal.spring_cashflow.dto.PartidaDTO;
+import com.dsi.spring.flujoreal.spring_cashflow.model.tree.ArbolProyecto;
 import com.dsi.spring.flujoreal.spring_cashflow.service.PartidaService;
 import com.dsi.spring.flujoreal.spring_cashflow.service.impl.PartidaServiceImpl;
 
@@ -20,24 +21,34 @@ public class PartidaController {
 
     private final PartidaService service = new PartidaServiceImpl();
 
-    // MOD: codCia y nroVersion con defaultValue="1"
+    // 🔹 Lista plana de partidas (niveles 1 y 2)
     @GetMapping("/conceptos")
     public List<PartidaDTO> conceptos(
-            @RequestParam(defaultValue = "1") int codCia,     // MOD
+            @RequestParam(defaultValue = "1") int codCia,
             @RequestParam int codPyto,
-            @RequestParam(defaultValue = "1") int nroVersion  // MOD
-    ) {
+            @RequestParam(defaultValue = "1") int nroVersion) {
         return service.conceptosDeProyecto(codCia, codPyto, nroVersion);
     }
 
-    // (opcional) endpoint corto que asume 1/1 sin query params:
-    // /api/proyectos/{codPyto}/conceptos
+    // 🔹 Endpoint corto: /api/proyectos/{codPyto}/conceptos
     @GetMapping("/proyectos/{codPyto}/conceptos")
-    public List<PartidaDTO> conceptosPorProyecto(
-            @PathVariable int codPyto
-    ) {
-        return service.conceptosDeProyecto(1, codPyto, 1);   // MOD: fijos
+    public List<PartidaDTO> conceptosPorProyecto(@PathVariable int codPyto) {
+        return service.conceptosDeProyecto(1, codPyto, 1);
     }
 
+    // 🔹 NUEVO: Árbol jerárquico Nivel 1 → Nivel 2 agrupado por Ingreso/Egreso
+    @GetMapping("/proyectos/{codCia}/{codPyto}/{nroVersion}/arbol")
+    public ArbolProyecto arbolProyecto(
+            @PathVariable int codCia,
+            @PathVariable int codPyto,
+            @PathVariable int nroVersion) {
+        return service.buildArbolProyecto(codCia, codPyto, nroVersion);
+    }
 
+    // (opcional) Endpoint más corto si quieres probar rápido
+    // /api/proyectos/{codPyto}/arbol
+    @GetMapping("/proyectos/{codPyto}/arbol")
+    public ArbolProyecto arbolPorProyecto(@PathVariable int codPyto) {
+        return service.buildArbolProyecto(1, codPyto, 1);
+    }
 }

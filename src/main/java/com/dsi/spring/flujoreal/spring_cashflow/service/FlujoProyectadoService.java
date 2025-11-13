@@ -13,18 +13,22 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 import com.dsi.spring.flujoreal.spring_cashflow.config.DBConnection;
-import com.dsi.spring.flujoreal.spring_cashflow.dao.FlujoProyectadoDAO;
-import com.dsi.spring.flujoreal.spring_cashflow.dao.impl.FlujoProyectadoDAOImpl;
+import com.dsi.spring.flujoreal.spring_cashflow.dao.FlujoCajaDetDAO;
+import com.dsi.spring.flujoreal.spring_cashflow.dao.FlujoProyectadoDAO;                 // 🔹 NUEVO
+import com.dsi.spring.flujoreal.spring_cashflow.dao.impl.FlujoCajaDetDAOImpl;
+import com.dsi.spring.flujoreal.spring_cashflow.dao.impl.FlujoProyectadoDAOImpl;        // 🔹 NUEVO
 import com.dsi.spring.flujoreal.spring_cashflow.dto.FilaFlujoDTO;
-import com.dsi.spring.flujoreal.spring_cashflow.dto.MonthValues;
-
-
+import com.dsi.spring.flujoreal.spring_cashflow.dto.FlujoCajaDetProySaveDTO;
+import com.dsi.spring.flujoreal.spring_cashflow.dto.MonthValues;         // 🔹 NUEVO
 
 @Service
 public class FlujoProyectadoService {
 
-    // DAO específico para leer los montos proyectados (lo creamos en el siguiente paso)
+    // DAO específico para leer los montos proyectados
     private final FlujoProyectadoDAO proyectadoDAO = new FlujoProyectadoDAOImpl();
+
+    // DAO compartido para guardar en FLUJOCAJA_DET (real y proyectado)
+    private final FlujoCajaDetDAO flujoCajaDetDAO = new FlujoCajaDetDAOImpl();       // 🔹 NUEVO
 
     /**
      * Devuelve las filas del Flujo de Caja Proyectado para un proyecto y año.
@@ -121,7 +125,20 @@ public class FlujoProyectadoService {
 
         return salida;
     }
-    
+
+    /**
+     * 🔹 NUEVO:
+     * Guarda las filas de flujo de caja proyectado que vienen del frontend.
+     * Se espera que correspondan al año actualmente visible en pantalla.
+     */
+    public void guardar(List<FlujoCajaDetProySaveDTO> filas) throws Exception {
+        if (filas == null || filas.isEmpty()) {
+            return;
+        }
+        // delega en el DAO común de detalle
+        flujoCajaDetDAO.saveOrUpdateProyectadoBatch(filas);
+    }
+
     /**
      * Obtiene los conceptos del proyecto (solo estructura):
      *  - Usa PROY_PARTIDA + PARTIDA

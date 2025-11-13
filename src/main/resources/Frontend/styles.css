@@ -696,3 +696,89 @@ input[type="number"]:focus {
   background-color: #ffffff;
   border: 1px solid #d1d5db;
 }
+
+/* ====== Árbol de partidas: mejoras visuales para el tema claro (Flujo Real) ====== */
+
+/* 1) Hacer sticky la 1ra columna en el tema claro */
+.real-body #tablaFlujo th:first-child,
+.real-body #tablaFlujo td.concepto-column {
+  position: sticky;
+  left: 0;
+  z-index: 6;               /* por encima de celdas vecinas */
+  background-color: #ffffff !important; /* fondo sólido para que no “transparente” al hacer scroll */
+}
+
+/* 2) Nombres largos: cortar con puntos suspensivos y mantener sangría aplicada por JS */
+.real-body #tablaFlujo td.concepto-column {
+  max-width: 420px;         /* ajusta si necesitas más ancho */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  /* el JS ya aplica padding-left = (nivel-1)*16px */
+}
+
+/* 3) Suavizar lectura con hover (no afecta a separadores) */
+.real-body #tablaFlujo tbody tr:not(.separator-row):not(.separator-neto):hover td {
+  background-color: #f5faff !important;
+}
+
+/* 4) Un toque de compacidad si hay muchas partidas */
+.real-body #tablaFlujo td {
+  padding: 6px 4px;
+}
+
+/* 5) Encabezado de la 1ra columna también pegado y con mismo look que el resto */
+.real-body #tablaFlujo th:first-child {
+  background-color: #f9fafb !important;
+  color: #6b7280 !important;
+}
+
+/* 6) Responsive: evita que la sangría + sticky “apriete” demasiado en pantallas chicas */
+@media (max-width: 900px) {
+  .real-body #tablaFlujo td.concepto-column {
+    min-width: 180px;
+    max-width: 280px;
+  }
+}
+
+/* ============================
+   Diferencia visual editable / no editable
+   para Flujo de Caja Proyectado
+   ============================ */
+
+/* 1) Celdas numéricas NO editables (solo lectura) */
+.real-body #tablaFlujoProy td.cell-number:not(.editable-cell) {
+  background-color: #f9fafb;  /* gris muy claro */
+  color: #6b7280;             /* gris medio */
+}
+
+/* 2) Celdas EDITABLES (hojas: nivel 2, 3, etc.) */
+.real-body #tablaFlujoProy td.editable-cell {
+  background-color: #ecfdf5;  /* verde muy suave */
+  cursor: text;
+}
+
+/* 3) Input dentro de las celdas editables */
+.real-body #tablaFlujoProy td.editable-cell input[type="number"] {
+  width: 100%;
+  background-color: transparent;
+  border: none;
+  border-bottom: 1px dashed #16a34a; /* línea punteada verde */
+  color: #065f46;                     /* verde más oscuro */
+  text-align: right;
+  padding: 2px 4px;
+  font-size: 11px;
+}
+
+/* 4) Efecto al enfocar el input */
+.real-body #tablaFlujoProy td.editable-cell input[type="number"]:focus {
+  outline: none;
+  border-bottom: 1px solid #16a34a;
+  box-shadow: 0 1px 0 0 #16a34a;
+}
+
+/* 5) Opcional: hover en editables para remarcar más */
+.real-body #tablaFlujoProy td.editable-cell:hover {
+  background-color: #d1fae5;  /* un poquito más intenso */
+}

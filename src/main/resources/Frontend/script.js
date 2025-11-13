@@ -25,6 +25,127 @@ function setStatus(msg) {
   if (statusMsgEl) statusMsgEl.textContent = msg || "";
 }
 
+// ======== Helpers para Árbol de Partidas ========
+const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+
+/** Lee versión si existe un <select id="versionSelect">; si no, usa "1" */
+function getVersionActual() {
+  const sel = document.getElementById("versionSelect");
+  const v = sel?.value?.trim();
+  return v || "1";
+}
+
+/**
+ * Construye el árbol desde un array plano:
+ * - Ruta A (preferida): usa CodPartidaPadre / PadCodPartida si viene del backend.
+ * - Ruta B (fallback): si no hay padre, usa pila por Nivel/Orden.
+ *   (Esta ruta ahora es solo de respaldo, el caso principal es porIngEgr.)
+ */
+function ensureTree(data) {
+  if (!Array.isArray(data)) return [];
+
+  const rows = data.map(it => ({
+    codPartida: it.CodPartida ?? it.codPartida,
+    codPadre:   it.PadCodPartida ?? it.padCodPartida ??
+                it.CodPartidaPadre ?? it.codPartidaPadre ??
+                it.Padre ?? it.padre ?? null,
+    ingEgr:     (it.IngEgr ?? it.ingEgr ?? "").toUpperCase(),
+    desPartida: it.DesPartida ?? it.desPartida ?? "",
+    nivel:      Number(it.Nivel ?? it.nivel ?? 1),
+    orden:      Number(it.Orden ?? it.orden ?? 0),
+  }));
+
+  const hayPadres = rows.some(r => r.codPadre != null && r.codPadre !== "");
+
+  if (hayPadres) {
+    const map = new Map(rows.map(r => [r.codPartida, { ...r, children: [] }]));
+    const roots = [];
+    rows.forEach(r => {
+      const nodo = map.get(r.codPartida);
+      const padre = r.codPadre ? map.get(r.codPadre) : null;
+      if (!padre) {
+        roots.push(nodo);
+      } else {
+        if (!padre.ingEgr || !nodo.ingEgr || padre.ingEgr === nodo.ingEgr) {
+          padre.children.push(nodo);
+        } else {
+          // defensa si mezclan I/E
+          roots.push(nodo);
+        }
+      }
+    });
+    const setNivel = (n, l = 1) => {
+      n.nivel = l;
+      (n.children || []).forEach(c => setNivel(c, l + 1));
+    };
+    roots.forEach(r => setNivel(r, 1));
+    const sortTree = (n) => {
+      if (n.children?.length) {
+        n.children.sort((a, b) => (a.orden || 0) - (b.orden || 0));
+        n.children.forEach(sortTree);
+      }
+    };
+    roots.sort((a, b) => (a.orden || 0) - (b.orden || 0));
+    roots.forEach(sortTree);
+    return roots;
+  }
+
+  // fallback por pila si no hay campo padre
+  const flat = rows.slice().sort((a,b)=>(a.orden||0)-(b.orden||0));
+  const root = [], stack = [];
+  flat.forEach(item => {
+    const nodo = { ...item, children: [] };
+    while (stack.length && (stack[stack.length-1].nivel >= nodo.nivel)) stack.pop();
+    (stack.length ? stack[stack.length-1].children : root).push(nodo);
+    stack.push(nodo);
+  });
+  return root;
+}
+
+/** Mapea una entrada del formato { partida:{...}, hijos:[...] } al nodo usado en el front */
+function mapEntradaPartida(entry, nivelBase = 1) {
+  if (!entry) return null;
+
+  // puede venir como {partida:{...}, hijos:[...]} o ya ser el objeto partida
+  const p = entry.partida || entry;
+
+  const nodo = {
+    codPartida: p.codPartida ?? p.CodPartida,
+    ingEgr: (p.ingEgr ?? p.IngEgr ?? "").toUpperCase(),
+    desPartida: p.desPartida ?? p.DesPartida ?? "",
+    nivel: Number(p.nivel ?? p.Nivel ?? nivelBase ?? 1),
+    orden: p.orden ?? p.Orden ?? null,
+    children: []
+  };
+
+  const hijos = entry.hijos || entry.children || [];
+  if (Array.isArray(hijos) && hijos.length) {
+    nodo.children = hijos
+      .map(h => mapEntradaPartida(h, (nodo.nivel || 1) + 1))
+      .filter(Boolean);
+  }
+
+  return nodo;
+}
+
+/** Recorrido preorden para aplanar el árbol con info de nivel */
+function flattenTree(tree, out = []) {
+  const visit = (n) => {
+    out.push(n);
+    (n.children || []).forEach(ch => visit(ch));
+  };
+  (tree || []).forEach(visit);
+  return out;
+}
+
+/** Divide raíces por tipo I/E (solo para el caso genérico plano) */
+function splitByTipo(tree) {
+  return {
+    ingresos: (tree || []).filter(n => (n.ingEgr || "").toUpperCase() === "I"),
+    egresos:  (tree || []).filter(n => (n.ingEgr || "").toUpperCase() === "E"),
+  };
+}
+
 // (esta primera init queda sobrescrita por la de abajo, pero la mantengo intacta)
 async function init() {
   crearHeaderTabla();
@@ -236,40 +357,36 @@ function setupEventListeners() {
 
   const btnPrev = document.getElementById("btnYearPrev");
   if (btnPrev) {
-    btnPrev.addEventListener("click", async () => {
+      btnPrev.addEventListener("click", () => {
       if (!proyectoSeleccionado) return;
       if (annoSeleccionado > proyectoSeleccionado.annoIni) {
-        annoSeleccionado--;
-        const yearDisplay = document.getElementById("yearDisplay");
-        if (yearDisplay) yearDisplay.textContent = String(annoSeleccionado);
-        try {
-          await cargarValoresReales(
-            proyectoSeleccionado.codCia,
-            proyectoSeleccionado.codPyto,
-            annoSeleccionado
-          );
-        } catch {}
-      }
-    });
+      annoSeleccionado--;
+      const yearDisplay = document.getElementById("yearDisplay");
+      if (yearDisplay) yearDisplay.textContent = String(annoSeleccionado);
+
+    // solo limpiamos la tabla y colores
+    resetCeldasNumericas();
+    resetComparacionVisual();
+  }
+});
+
   }
 
   const btnNext = document.getElementById("btnYearNext");
   if (btnNext) {
-    btnNext.addEventListener("click", async () => {
-      if (!proyectoSeleccionado) return;
-      if (annoSeleccionado < proyectoSeleccionado.annoFin) {
-        annoSeleccionado++;
-        const yearDisplay = document.getElementById("yearDisplay");
-        if (yearDisplay) yearDisplay.textContent = String(annoSeleccionado);
-        try {
-          await cargarValoresReales(
-            proyectoSeleccionado.codCia,
-            proyectoSeleccionado.codPyto,
-            annoSeleccionado
-          );
-        } catch {}
-      }
-    });
+    btnNext.addEventListener("click", () => {
+    if (!proyectoSeleccionado) return;
+    if (annoSeleccionado < proyectoSeleccionado.annoFin) {
+      annoSeleccionado++;
+      const yearDisplay = document.getElementById("yearDisplay");
+      if (yearDisplay) yearDisplay.textContent = String(annoSeleccionado);
+
+    // solo limpiamos la tabla y colores
+    resetCeldasNumericas();
+    resetComparacionVisual();
+  }
+});
+
   }
 
   const btnValores = document.getElementById("btnValores");
@@ -301,19 +418,17 @@ function setupEventListeners() {
 
   const yearSelectEl2 = document.getElementById("yearSelect");
   if (yearSelectEl2) {
-    yearSelectEl2.addEventListener("change", async e => {
-      if (!proyectoSeleccionado) return;
-      annoSeleccionado = parseInt(e.target.value, 10);
-      const yd = document.getElementById("yearDisplay");
-      if (yd) yd.textContent = String(annoSeleccionado);
-      try {
-        await cargarValoresReales(
-          proyectoSeleccionado.codCia,
-          proyectoSeleccionado.codPyto,
-          annoSeleccionado
-        );
-      } catch {}
-    });
+    yearSelectEl2.addEventListener("change", e => {
+    if (!proyectoSeleccionado) return;
+    annoSeleccionado = parseInt(e.target.value, 10);
+    const yd = document.getElementById("yearDisplay");
+    if (yd) yd.textContent = String(annoSeleccionado);
+
+  // al cambiar de año, tabla limpia hasta que tú pulses "Valores"
+  resetCeldasNumericas();
+  resetComparacionVisual();
+});
+
   }
 
   // Botón Guardar
@@ -380,41 +495,59 @@ function setupEventListeners() {
   }
 }
 
-// Cargar conceptos
+// ========= MODIFICADO: cargar conceptos desde /proyectos/{cia}/{pyto}/{ver}/arbol =========
 async function cargarConceptos(codPyto) {
   try {
-    const url = `${API_BASE}/conceptos?codPyto=${codPyto}`;
-    console.log("FETCH:", url);
-    const res = await fetch(url, { mode: "cors" });
+    if (!proyectoSeleccionado) throw new Error("Seleccione primero un proyecto.");
+    const codCia = proyectoSeleccionado.codCia;
+    const ver = getVersionActual();
+
+    const url = `${API_BASE}/proyectos/${codCia}/${codPyto}/${ver}/arbol`;
+    console.log("FETCH árbol:", url);
+
+    const res = await fetch(url);
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status} ${res.statusText} ${text}`);
+      const txt = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${txt}`);
     }
+
     const data = await res.json();
+    console.log("Árbol crudo:", data);
 
-    const ingresos = data
-      .filter(d => d.ingEgr === "I")
-      .sort((a,b)=>(a.orden ?? a.codPartida)-(b.orden ?? b.codPartida));
+    const arrI = data?.porIngEgr?.I ?? [];
+    const arrE = data?.porIngEgr?.E ?? [];
 
-    const egresos  = data
-      .filter(d => d.ingEgr === "E")
-      .sort((a,b)=>(a.orden ?? a.codPartida)-(b.orden ?? b.codPartida));
+    const ingresosRoots = arrI.map(e => mapEntradaPartida(e, 1));
+    const egresosRoots  = arrE.map(e => mapEntradaPartida(e, 1));
 
-    conceptosCargados.ingresos = ingresos;
-    conceptosCargados.egresos  = egresos;
+    // Aplanar preorden
+    conceptosCargados.ingresos = flattenTree(ingresosRoots);
+    conceptosCargados.egresos  = flattenTree(egresosRoots);
 
-    renderConceptos();
+    // Pintar
+    renderArbolEnTabla();
+    setStatus("Árbol de partidas cargado.");
+
+    if (annoSeleccionado) {
+      await cargarValoresReales(
+        proyectoSeleccionado.codCia,
+        proyectoSeleccionado.codPyto,
+        annoSeleccionado
+      );
+    }
   } catch (err) {
     console.error("ERROR cargarConceptos:", err);
-    alert("No se pudieron cargar los conceptos: " + err.message);
+    alert("No se pudo cargar conceptos: " + err.message);
   }
 }
 
-function renderConceptos() {
+
+// ========= NUEVO: render del árbol en tu misma tabla =========
+function renderArbolEnTabla() {
   const tbody = document.getElementById("bodyRows");
   tbody.innerHTML = "";
 
-  // INGRESOS header
+  // Header INGRESOS
   const trIngHeader = document.createElement("tr");
   trIngHeader.classList.add("separator-row");
   const tdIng = document.createElement("td");
@@ -423,11 +556,9 @@ function renderConceptos() {
   trIngHeader.appendChild(tdIng);
   tbody.appendChild(trIngHeader);
 
-  conceptosCargados.ingresos.forEach((p) => {
-    tbody.appendChild(crearFilaPartida(p));
-  });
+  conceptosCargados.ingresos.forEach(n => tbody.appendChild(crearFilaNodo(n)));
 
-  // EGRESOS header
+  // Header EGRESOS
   const trEgrHeader = document.createElement("tr");
   trEgrHeader.classList.add("separator-row");
   const tdEgr = document.createElement("td");
@@ -436,9 +567,7 @@ function renderConceptos() {
   trEgrHeader.appendChild(tdEgr);
   tbody.appendChild(trEgrHeader);
 
-  conceptosCargados.egresos.forEach((p) => {
-    tbody.appendChild(crearFilaPartida(p));
-  });
+  conceptosCargados.egresos.forEach(n => tbody.appendChild(crearFilaNodo(n)));
 
   // NETO
   const trNet = document.createElement("tr");
@@ -448,11 +577,12 @@ function renderConceptos() {
   trNet.appendChild(tdNet);
   for (let i = 0; i < 15; i++) {
     const td = document.createElement("td");
-    td.textContent = "0";
+    td.textContent = "0.00";
     trNet.appendChild(td);
   }
   tbody.appendChild(trNet);
 
+  // Mensaje vacío
   if (!conceptosCargados.ingresos.length && !conceptosCargados.egresos.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -461,35 +591,33 @@ function renderConceptos() {
     tr.appendChild(td);
     tbody.appendChild(tr);
   }
+  resetCeldasNumericas();
+
 }
 
-// Crear fila de partida
-function crearFilaPartida(partida) {
+function crearFilaNodo(nodo) {
   const tr = document.createElement("tr");
   tr.classList.add("data-row");
-  if (partida.ingEgr) {
-    tr.dataset.ingEgr = partida.ingEgr;
-  }
+  if (nodo.ingEgr) tr.dataset.ingEgr = nodo.ingEgr;
 
   const tdConcepto = document.createElement("td");
-  tdConcepto.textContent = partida.desPartida;
-  tdConcepto.dataset.codPartida = partida.codPartida;
   tdConcepto.classList.add("concepto-column");
+  tdConcepto.dataset.codPartida = nodo.codPartida;
 
-  if (typeof partida.nivel === "number" && !isNaN(partida.nivel)) {
-    tdConcepto.style.paddingLeft = `${Math.max(0, partida.nivel - 1) * 16}px`;
-  }
+  // Sangría por nivel
+  const nivel = Number(nodo.nivel ?? 1);
+  tdConcepto.style.paddingLeft = `${Math.max(0, nivel - 1) * 16}px`;
+
+  tdConcepto.textContent = nodo.desPartida || nodo.nombre || "";
   tr.appendChild(tdConcepto);
 
-  // 12 meses + Suma + Acum Ant. + Total
+  // 12 meses + Suma + Acum Ant + Total (compatibles con pintarValores / comparar)
   for (let i = 0; i < 15; i++) {
     const td = document.createElement("td");
-    td.textContent = "0";
-    td.dataset.codPartida = partida.codPartida;
+    td.textContent = "0.00";
+    td.dataset.codPartida = nodo.codPartida;
     td.dataset.colIndex = i;
-    if (i < 12) {
-      td.dataset.mes = i + 1;
-    }
+    if (i < 12) td.dataset.mes = i + 1;
     tr.appendChild(td);
   }
   return tr;
@@ -649,7 +777,7 @@ function resetCeldasNumericas() {
     if (tds.length >= 16) {
       for (let i = 1; i < tds.length; i++) {
         const td = tds[i];
-        td.textContent = "0";
+        td.textContent = "0.00";
         td.style.removeProperty("color");
         td.style.fontWeight = "";
       }
