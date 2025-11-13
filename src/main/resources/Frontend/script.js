@@ -493,6 +493,14 @@ function setupEventListeners() {
       }
     });
   }
+
+  const btnInicio = document.getElementById("btnInicio");
+  if (btnInicio) {
+    btnInicio.addEventListener('click', () => {
+        window.location.href = '/'; // Redirige a la página principal
+    });
+  }
+  
 }
 
 // ========= MODIFICADO: cargar conceptos desde /proyectos/{cia}/{pyto}/{ver}/arbol =========
@@ -528,6 +536,7 @@ async function cargarConceptos(codPyto) {
     renderArbolEnTabla();
     setStatus("Árbol de partidas cargado.");
 
+    /*
     if (annoSeleccionado) {
       await cargarValoresReales(
         proyectoSeleccionado.codCia,
@@ -535,6 +544,8 @@ async function cargarConceptos(codPyto) {
         annoSeleccionado
       );
     }
+      */
+     
   } catch (err) {
     console.error("ERROR cargarConceptos:", err);
     alert("No se pudo cargar conceptos: " + err.message);

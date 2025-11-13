@@ -995,7 +995,12 @@ function setupEventListenersProy() {
   }
 }
 
-
+const btnInicioProy = document.getElementById("btnInicioProy");
+  if (btnInicioProy) {
+    btnInicioProy.addEventListener('click', () => {
+        window.location.href = '/'; // Redirige a la página principal
+    });
+  }
 
 async function guardarFlujoProyectado() {
   if (!proyectoSeleccionadoProy || !annoSeleccionadoProy) {

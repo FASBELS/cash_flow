@@ -1,4 +1,3 @@
-// src/main/java/com/dsi/spring/flujoreal/spring_cashflow/dao/impl/IngresoRealDAOImpl.java
 package com.dsi.spring.flujoreal.spring_cashflow.dao.impl;
 
 import java.math.BigDecimal;
@@ -14,6 +13,7 @@ import com.dsi.spring.flujoreal.spring_cashflow.dao.IngresoRealDAO;
 public class IngresoRealDAOImpl implements IngresoRealDAO {
 
     private static final String SQL_MESES = """
+        -- Nivel 3 (Hijos)
         SELECT d.CodPartida,
                SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=1  THEN d.ImpTotalMN ELSE 0 END) AS ene,
                SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=2  THEN d.ImpTotalMN ELSE 0 END) AS feb,
@@ -29,27 +29,61 @@ public class IngresoRealDAOImpl implements IngresoRealDAO {
                SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=12 THEN d.ImpTotalMN ELSE 0 END) AS dic
         FROM VTACOMP_PAGOCAB c
         JOIN VTACOMP_PAGODET d ON d.CodCia=c.CodCia AND d.NroCP=c.NroCP
-        JOIN PROY_PARTIDA pp ON pp.CodCia=c.CodCia AND pp.CodPyto=c.CodPyto
-                             AND pp.IngEgr='I' AND pp.CodPartida=d.CodPartida
         WHERE c.CodCia=? AND c.CodPyto=? AND EXTRACT(YEAR FROM c.FecCP)=?
         GROUP BY d.CodPartida
+
+        UNION ALL
+
+        -- Nivel 2 (Padres) - Calculados desde los hijos
+        SELECT pm.CodPartida AS CodPartida, -- Se agrupa por el CodPartida (Padre)
+               SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=1  THEN d.ImpTotalMN ELSE 0 END) AS ene,
+               SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=2  THEN d.ImpTotalMN ELSE 0 END) AS feb,
+               SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=3  THEN d.ImpTotalMN ELSE 0 END) AS mar,
+               SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=4  THEN d.ImpTotalMN ELSE 0 END) AS abr,
+               SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=5  THEN d.ImpTotalMN ELSE 0 END) AS may,
+               SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=6  THEN d.ImpTotalMN ELSE 0 END) AS jun,
+               SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=7  THEN d.ImpTotalMN ELSE 0 END) AS jul,
+               SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=8  THEN d.ImpTotalMN ELSE 0 END) AS ago,
+               SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=9  THEN d.ImpTotalMN ELSE 0 END) AS sep,
+               SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=10 THEN d.ImpTotalMN ELSE 0 END) AS oct,
+               SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=11 THEN d.ImpTotalMN ELSE 0 END) AS nov,
+               SUM(CASE WHEN EXTRACT(MONTH FROM c.FecCP)=12 THEN d.ImpTotalMN ELSE 0 END) AS dic
+        FROM VTACOMP_PAGOCAB c
+        JOIN VTACOMP_PAGODET d ON d.CodCia=c.CodCia AND d.NroCP=c.NroCP
+        -- CORRECCIÓN: El JOIN es d.CodPartida (hijo) = pm.PadCodPartida (hijo)
+        JOIN PARTIDA_MEZCLA pm ON d.CodCia = pm.CodCia AND d.IngEgr = pm.IngEgr AND d.CodPartida = pm.PadCodPartida
+        WHERE c.CodCia=? AND c.CodPyto=? AND EXTRACT(YEAR FROM c.FecCP)=?
+        GROUP BY pm.CodPartida -- Se agrupa por el CodPartida (Padre)
         """;
 
     private static final String SQL_ACUM_ANT = """
+        -- Nivel 3 (Hijos)
         SELECT d.CodPartida, SUM(d.ImpTotalMN) AS acum
         FROM VTACOMP_PAGOCAB c
         JOIN VTACOMP_PAGODET d ON d.CodCia=c.CodCia AND d.NroCP=c.NroCP
-        JOIN PROY_PARTIDA pp ON pp.CodCia=c.CodCia AND pp.CodPyto=c.CodPyto
-                             AND pp.IngEgr='I' AND pp.CodPartida=d.CodPartida
         WHERE c.CodCia=? AND c.CodPyto=? AND EXTRACT(YEAR FROM c.FecCP) < ?
         GROUP BY d.CodPartida
+        
+        UNION ALL
+
+        -- Nivel 2 (Padres)
+        SELECT pm.CodPartida AS CodPartida, SUM(d.ImpTotalMN) AS acum
+        FROM VTACOMP_PAGOCAB c
+        JOIN VTACOMP_PAGODET d ON d.CodCia=c.CodCia AND d.NroCP=c.NroCP
+        -- CORRECCIÓN: El JOIN es d.CodPartida (hijo) = pm.PadCodPartida (hijo)
+        JOIN PARTIDA_MEZCLA pm ON d.CodCia = pm.CodCia AND d.IngEgr = pm.IngEgr AND d.CodPartida = pm.PadCodPartida
+        WHERE c.CodCia=? AND c.CodPyto=? AND EXTRACT(YEAR FROM c.FecCP) < ?
+        GROUP BY pm.CodPartida
         """;
 
     @Override public Map<Integer, BigDecimal[]> mesesPorAnno(int cia, int pyto, int anno) throws Exception {
         Map<Integer, BigDecimal[]> out = new HashMap<>();
         try (Connection cn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = cn.prepareStatement(SQL_MESES)) {
-            ps.setInt(1, cia); ps.setInt(2, pyto); ps.setInt(3, anno);
+            
+            ps.setInt(1, cia); ps.setInt(2, pyto); ps.setInt(3, anno); // Para la parte 1 del UNION
+            ps.setInt(4, cia); ps.setInt(5, pyto); ps.setInt(6, anno); // Para la parte 2 del UNION
+            
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     BigDecimal[] m = new BigDecimal[12];
@@ -65,7 +99,10 @@ public class IngresoRealDAOImpl implements IngresoRealDAO {
         Map<Integer, BigDecimal> out = new HashMap<>();
         try (Connection cn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = cn.prepareStatement(SQL_ACUM_ANT)) {
-            ps.setInt(1, cia); ps.setInt(2, pyto); ps.setInt(3, anno);
+            
+            ps.setInt(1, cia); ps.setInt(2, pyto); ps.setInt(3, anno); // Para la parte 1 del UNION
+            ps.setInt(4, cia); ps.setInt(5, pyto); ps.setInt(6, anno); // Para la parte 2 del UNION
+            
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) out.put(rs.getInt("CodPartida"), rs.getBigDecimal("acum"));
             }

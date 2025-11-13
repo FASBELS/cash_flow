@@ -13,10 +13,14 @@ public class DBConnection {
     private volatile Connection connection;
 
     // Datos de conexión a Oracle (ajusta según tu entorno)
-    private final String URL = "jdbc:oracle:thin:@//localhost:1522/XEPDB1";
-    // private final String URL = "jdbc:oracle:thin:@//localhost:1521/XEPDB1";   //para mi oracle (Alex)
-    private final String USER = "HR";
-    private final String PASSWORD = "hr";
+    // private final String URL = "jdbc:oracle:thin:@//localhost:1522/XEPDB1";
+    // private final String USER = "HR";
+    // private final String PASSWORD = "hr";
+
+    // Oracle de Alex:
+    private final String URL = "jdbc:oracle:thin:@//localhost:1521/XEPDB1";
+    private final String USER = "PY DEV02"; 
+    private final String PASSWORD = "123";
 
     // Tiempo (seg) para isValid()
     private static final int VALID_TIMEOUT = 5;
