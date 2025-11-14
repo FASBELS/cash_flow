@@ -10,16 +10,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.dsi.spring.flujoreal.spring_cashflow.dto.PartidaDTO;
-import com.dsi.spring.flujoreal.spring_cashflow.model.tree.ArbolProyecto;
 import com.dsi.spring.flujoreal.spring_cashflow.service.PartidaService;
-import com.dsi.spring.flujoreal.spring_cashflow.service.impl.PartidaServiceImpl;
+import com.dsi.spring.flujoreal.spring_cashflow.tree.ArbolProyecto;
 
 @CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api")
 public class PartidaController {
 
-    private final PartidaService service = new PartidaServiceImpl();
+    private final PartidaService service = new PartidaService();
 
     // 🔹 Lista plana de partidas (niveles 1 y 2)
     @GetMapping("/conceptos")

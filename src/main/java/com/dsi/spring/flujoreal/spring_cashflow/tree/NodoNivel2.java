@@ -1,4 +1,4 @@
-package com.dsi.spring.flujoreal.spring_cashflow.model.tree;
+package com.dsi.spring.flujoreal.spring_cashflow.tree;
 
 import java.math.BigDecimal;
 
