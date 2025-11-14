@@ -523,55 +523,100 @@ async function construirFilasParaAnnoProyDesdeBackend(anio) {
   return filas;
 }
 
-async function cargarValoresProyectadosDesdeBackend(anio) {
-  if (!proyectoSeleccionadoProy) return;
+// =========================
+// EVENTOS
+// =========================
+async function cargarValoresProyectadosDesdeBackend(anio, pintarEnTabla = true) {
+  if (!proyectoSeleccionadoProy) {
+    alert("Seleccione un proyecto.");
+    return;
+  }
+
+  const tbody = document.getElementById("bodyRowsProy");
+  if (!tbody) return;
 
   const { codCia, codPyto } = proyectoSeleccionadoProy;
 
   const url = `${API_BASE}/flujo-proyectado/valores?codCia=${codCia}&codPyto=${codPyto}&anno=${anio}`;
+  console.log("[PROY] Cargando valores proyectados desde backend:", url);
 
   const res = await fetch(url, { mode: "cors" });
-
   if (!res.ok) {
-    console.error("Error cargando valores proyectados:", await res.text());
+    console.error("Error al cargar valores proyectados:", await res.text());
+    alert("Error cargando valores.");
     return;
   }
 
-  const data = await res.json(); // viene del backend con meses, suma, acum, total
+  const data = await res.json(); // Lista de FilaFlujoDTO
 
-  const tbody = document.getElementById("bodyRowsProy");
+  // 1) SIEMPRE ACTUALIZAMOS EL CACHE A PARTIR DEL BACKEND
+  const filasCache = [];
 
-  data.forEach(f => {
-    // Buscar fila por codPartida + ingEgr
-    const selector = `tr.data-row-proy[data-ing-egr="${f.ingEgr}"] td.concepto-column[data-cod-partida="${f.codPartida}"]`;
+  (data || []).forEach(f => {
+    if (f.ingEgr !== "I" && f.ingEgr !== "E") return;
+
+    const valores = [];
+
+    // 12 meses
+    for (let i = 0; i < 12; i++) {
+      const v = f.valores?.mes?.[i] ?? 0;
+      const num = typeof v === "number" ? v : parseFloat(v);
+      valores.push(isNaN(num) ? 0 : num);
+    }
+
+    // suma, acumAnt, total
+    const suma    = f.valores?.suma    ?? 0;
+    const acumAnt = f.valores?.acumAnt ?? 0;
+    const total   = f.valores?.total   ?? 0;
+
+    const nSuma    = typeof suma    === "number" ? suma    : parseFloat(suma)    || 0;
+    const nAcumAnt = typeof acumAnt === "number" ? acumAnt : parseFloat(acumAnt) || 0;
+    const nTotal   = typeof total   === "number" ? total   : parseFloat(total)   || 0;
+
+    valores.push(nSuma, nAcumAnt, nTotal);
+
+    filasCache.push({
+      codPartida: f.codPartida,
+      ingEgr: f.ingEgr,
+      valores
+    });
+  });
+
+  cacheValoresProyPorAnno[anio] = filasCache;
+
+  // 2) SI NO HAY QUE PINTAR, TERMINAMOS AQUÍ
+  if (!pintarEnTabla) {
+    return;
+  }
+
+  // 3) PINTAR SOLO EL AÑO SELECCIONADO
+  limpiarValoresTablaProy();
+
+  filasCache.forEach(reg => {
+    const selector = `tr.data-row-proy[data-ing-egr="${reg.ingEgr}"] td.concepto-column[data-cod-partida="${reg.codPartida}"]`;
     const cell = tbody.querySelector(selector);
     if (!cell) return;
 
     const tr = cell.parentElement;
     const tds = tr.querySelectorAll("td");
 
-    // === 12 meses ===
+    // meses 0..11
     for (let i = 0; i < 12; i++) {
-      const val = f.valores.mes[i] || 0;
-      tds[i + 1].textContent = formatNumber(val);
+      tds[i + 1].textContent = formatNumber(reg.valores[i] || 0);
     }
 
-    // === Suma ===
-    tds[13].textContent = formatNumber(f.valores.suma || 0);
-
-    // === Acum. Ant. ===
-    tds[14].textContent = formatNumber(f.valores.acumAnt || 0);
-
-    // === Total ===
-    tds[15].textContent = formatNumber(f.valores.total || 0);
+    // suma, acum ant, total
+    tds[13].textContent = formatNumber(reg.valores[12] || 0);
+    tds[14].textContent = formatNumber(reg.valores[13] || 0);
+    tds[15].textContent = formatNumber(reg.valores[14] || 0);
   });
 
-  // Después de pintar, cachear este año
-  cachearTablaProyParaAnno(anio);
-
-  // Recalcular neto
+  // Recalcular Neto
   recalcularFilaNetoProy();
+
+  setStatusProy(`Datos proyectados cargados desde BD para ${anio}.`);
 }
+
 
 function cachearTablaProyParaAnno(anio) {
   const tbody = document.getElementById("bodyRowsProy");
@@ -844,28 +889,41 @@ function activarEdicionValoresProy() {
   const tbody = document.getElementById("bodyRowsProy");
   if (!tbody) return;
 
+  // 🔁 TOGGLE: si ya está activa, la desactivamos
   if (edicionProyActiva) {
-    setStatusProy("La edición de valores ya está activa.");
+    edicionProyActiva = false;
+    valoresProyActivo = false;
+
+    // dejar de ser editables las celdas verdes (pero SIN cambiar valores)
+    tbody.querySelectorAll("td.editable-mes-proy").forEach(td => {
+      td.contentEditable = "false";
+      td.classList.remove("proy-editable-activa");
+    });
+
+    // quitamos el listener de blur
+    tbody.removeEventListener("blur", onBlurCeldaProy, true);
+
+    setStatusProy("Edición de valores proyectados desactivada.");
     return;
   }
 
+  // ✅ ACTIVAR edición
   edicionProyActiva = true;
   valoresProyActivo = true;
 
-  // Empezamos en cero
-  limpiarValoresTablaProy();
-
-  // Hacer editables solo las hojas
+  // IMPORTANTE: ya NO llamamos a limpiarValoresTablaProy(),
+  // así no se resetean los datos cargados.
   tbody.querySelectorAll("td.editable-mes-proy").forEach(td => {
     td.contentEditable = "true";
     td.classList.add("proy-editable-activa");
   });
 
-  // Escuchar cambios una sola vez
+  // escuchamos blur para formatear y recalcular
   tbody.addEventListener("blur", onBlurCeldaProy, true);
 
   setStatusProy("Edición de valores proyectados activada. Ingrese montos en las partidas de nivel más bajo.");
 }
+
 
 function onBlurCeldaProy(ev) {
   const td = ev.target.closest("td.editable-mes-proy");
@@ -889,68 +947,7 @@ function onBlurCeldaProy(ev) {
 // =========================
 // EVENTOS
 // =========================
-async function cargarValoresProyectadosDesdeBackend(anio) {
-  if (!proyectoSeleccionadoProy) {
-    alert("Seleccione un proyecto.");
-    return;
-  }
 
-  const tbody = document.getElementById("bodyRowsProy");
-  if (!tbody) return;
-
-  const { codCia, codPyto } = proyectoSeleccionadoProy;
-
-  const url = `${API_BASE}/flujo-proyectado/valores?codCia=${codCia}&codPyto=${codPyto}&anno=${anio}`;
-  console.log("[PROY] Cargando valores proyectados desde backend:", url);
-
-  const res = await fetch(url, { mode: "cors" });
-  if (!res.ok) {
-    console.error("Error al cargar valores proyectados:", await res.text());
-    alert("Error cargando valores.");
-    return;
-  }
-
-  const data = await res.json(); // Lista de FilaFlujoDTO
-
-  // RESETEAR TABLA ANTES DE PINTAR
-  limpiarValoresTablaProy();
-
-  data.forEach(f => {
-    const selector = `tr.data-row-proy[data-ing-egr="${f.ingEgr}"] td.concepto-column[data-cod-partida="${f.codPartida}"]`;
-    const cell = tbody.querySelector(selector);
-    if (!cell) return;
-
-    const tr = cell.parentElement;
-    const tds = tr.querySelectorAll("td");
-
-    // --- 12 meses ---
-    for (let i = 0; i < 12; i++) {
-      const val = f.valores?.mes?.[i] ?? 0;
-      tds[i + 1].textContent = formatNumber(val);
-    }
-
-    // --- Suma ---
-    tds[13].textContent = formatNumber(f.valores?.suma ?? 0);
-
-    // --- Acum. Ant. (ImpIni) ---
-    tds[14].textContent = formatNumber(f.valores?.acumAnt ?? 0);
-
-    // --- Total (ImpAcum) ---
-    tds[15].textContent = formatNumber(f.valores?.total ?? 0);
-  });
-
-  // Recalcular Padres y Neto
-  recalcularFilaNetoProy();
-
-  // Guardar año en cache
-  cachearTablaProyParaAnno(anio);
-  // Si existe el año anterior en cache → copiar Acum. Ant.
-if (cacheValoresProyPorAnno[anio - 1]) {
-  copiarAcumuladoAnteriorDesdeAnno(anio - 1, anio);
-}
-
-  setStatusProy(`Datos proyectados cargados desde BD para ${anio}.`);
-}
 
 function setupEventListenersProy() {
   const selectProyecto = document.getElementById("selectProyectoProy");
@@ -1046,35 +1043,51 @@ function setupEventListenersProy() {
   });
 
   // ===============================
-  // CAMBIO DE AÑO CON CACHE
-  // ===============================
-  if (yearSelect) {
-    yearSelect.addEventListener("change", (e) => {
-      if (!proyectoSeleccionadoProy) return;
+// CAMBIO DE AÑO CON CACHE
+// ===============================
+if (yearSelect) {
+  yearSelect.addEventListener("change", (e) => {
+    if (!proyectoSeleccionadoProy) return;
 
-      const nuevoAnno = parseInt(e.target.value, 10);
-      if (!nuevoAnno) return;
+    const nuevoAnno = parseInt(e.target.value, 10);
+    if (!nuevoAnno) return;
 
-      // Guardar el año anterior antes de cambiar
-      if (annoSeleccionadoProy != null) {
-        cachearTablaProyParaAnno(annoSeleccionadoProy);
-      }
+    // Guardar el año anterior antes de cambiar (DOM → cache)
+    if (annoSeleccionadoProy != null) {
+      cachearTablaProyParaAnno(annoSeleccionadoProy);
+    }
 
-      // Cambiar año
-      annoSeleccionadoProy = nuevoAnno;
-      setStatusProy(`Año ${annoSeleccionadoProy} seleccionado.`);
+    // Cambiar año actual
+    annoSeleccionadoProy = nuevoAnno;
+    setStatusProy(
+      `Año ${annoSeleccionadoProy} seleccionado. Use "Cargar datos" si desea traer valores guardados de BD.`
+    );
 
-      // Restaurar valores desde cache
-     if (cacheValoresProyPorAnno[nuevoAnno]) {
-        // ya existe cache → usarlo
-    restaurarTablaProyDesdeCache(nuevoAnno);
-      } else {
-        // no existe cache → cargar desde backend
-      cargarValoresProyectadosDesdeBackend(nuevoAnno);
+    const tbody = document.getElementById("bodyRowsProy");
+    if (!tbody) return;
+
+    // 1) Pintar el año desde cache si existe; si no, dejar todo en 0
+    if (cacheValoresProyPorAnno[nuevoAnno]) {
+      restaurarTablaProyDesdeCache(nuevoAnno);
+    } else {
+      limpiarValoresTablaProy();
+    }
+
+    // 2) IMPORTANTE: si existe información del año anterior,
+    //    copiamos su TOTAL como "Acum. Ant." del año actual
+    if (cacheValoresProyPorAnno[nuevoAnno - 1]) {
+      copiarAcumuladoAnteriorDesdeAnno(nuevoAnno - 1, nuevoAnno);
+
+      // Actualizar el snapshot del año actual con estos nuevos Acum. Ant./Total
+      cachearTablaProyParaAnno(nuevoAnno);
+    }
+
+    // 3) Recalcular Neto
+    recalcularFilaNetoProy();
+  });
 }
 
-    });
-  }
+
 
   // ===============================
   // BOTÓN CONCEPTO
@@ -1140,16 +1153,31 @@ function setupEventListenersProy() {
   }
 
   const btnCargarDatosProy = document.getElementById("btnCargarDatosProy");
-if (btnCargarDatosProy) {
-  btnCargarDatosProy.addEventListener("click", () => {
-    if (!proyectoSeleccionadoProy || !annoSeleccionadoProy) {
-      alert("Seleccione proyecto y año.");
-      return;
-    }
+  if (btnCargarDatosProy) {
+    btnCargarDatosProy.addEventListener("click", async () => {
+      if (!proyectoSeleccionadoProy || !annoSeleccionadoProy) {
+        alert("Seleccione proyecto y año.");
+        return;
+      }
 
-    cargarValoresProyectadosDesdeBackend(annoSeleccionadoProy);
-  });
-}
+      const { annoIni, annoFin } = proyectoSeleccionadoProy;
+      if (!annoIni || !annoFin || annoIni > annoFin) {
+        alert("Rango de años inválido para el proyecto.");
+        return;
+      }
+
+      // Cargamos TODOS los años desde BD
+      for (let anio = annoIni; anio <= annoFin; anio++) {
+        const pintar = (anio === annoSeleccionadoProy); // solo pintamos el año actual
+        await cargarValoresProyectadosDesdeBackend(anio, pintar);
+      }
+
+      setStatusProy(
+        `Datos proyectados cargados desde BD para todos los años (${annoIni}-${annoFin}).`
+      );
+    });
+  }
+
 
 }
 
