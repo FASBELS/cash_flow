@@ -21,6 +21,17 @@ public class PartidaServiceImpl implements PartidaService {
     private final DAOFactory factory = DAOFactory.getDAOFactory(DAOFactory.ORACLE);
     private final PartidaDAO dao = factory.getPartidaDAO();
 
+    // Comparator común para respetar el ORDEN del proyecto
+    private static final Comparator<PartidaDTO> ORDEN_COMPARATOR =
+        Comparator
+            // primero por orden (nulls al final)
+            .comparing(
+                (PartidaDTO p) -> p.getOrden(),
+                Comparator.nullsLast(Integer::compareTo)
+            )
+            // y si hubiera empate, por codPartida
+            .thenComparing(PartidaDTO::getCodPartida);
+
     @Override
     public List<PartidaDTO> conceptosDeProyecto(int codCia, int codPyto, int nroVersion) {
         return dao.listarPorProyecto(codCia, codPyto, nroVersion);
@@ -41,7 +52,7 @@ public class PartidaServiceImpl implements PartidaService {
         // 3️⃣ Crear nodos de nivel 1 (ingresos/egresos)
         for (PartidaDTO p : partidas.stream()
                 .filter(x -> x.getNivel() == 1)
-                .sorted(Comparator.comparing(PartidaDTO::getCodPartida))
+                .sorted(ORDEN_COMPARATOR)  // 👈 ahora respeta ppm.Orden
                 .collect(Collectors.toList())) {
 
             NodoNivel1 n1 = new NodoNivel1(p);
@@ -56,7 +67,7 @@ public class PartidaServiceImpl implements PartidaService {
         // 4️⃣ Vincular los nodos de nivel 2 con su nivel 1
         for (PartidaDTO p : partidas.stream()
                 .filter(x -> x.getNivel() == 2)
-                .sorted(Comparator.comparing(PartidaDTO::getCodPartida))
+                .sorted(ORDEN_COMPARATOR)  // 👈 idem, orden de hijos según mezcla
                 .collect(Collectors.toList())) {
 
             var parentCodes = PartidaHierarchyResolver.deriveParent(p.getCodPartidas(), p.getCodPartida());
@@ -71,13 +82,13 @@ public class PartidaServiceImpl implements PartidaService {
             if (padre != null) {
                 padre.getHijos().add(new NodoNivel2(p));
             } else {
+                // Si no encontramos padre, lo tratamos como nivel 1 suelto
                 NodoNivel1 suelto = new NodoNivel1(p);
                 arbol.getPorIngEgr()
-                    .computeIfAbsent(p.getIngEgr(), k -> new ArrayList<>())
-                    .add(suelto);
+                     .computeIfAbsent(p.getIngEgr(), k -> new ArrayList<>())
+                     .add(suelto);
             }
         }
-
 
         return arbol;
     }

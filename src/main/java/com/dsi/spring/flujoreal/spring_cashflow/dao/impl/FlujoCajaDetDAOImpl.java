@@ -3,6 +3,7 @@ package com.dsi.spring.flujoreal.spring_cashflow.dao.impl;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 
 import com.dsi.spring.flujoreal.spring_cashflow.config.DBConnection;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.FlujoCajaDetDAO;
@@ -14,227 +15,194 @@ public class FlujoCajaDetDAOImpl implements FlujoCajaDetDAO {  // 👈 IMPORTANT
     // ============================================================
     //  FLUJO REAL  (YA EXISTENTE)
     // ============================================================
-    @Override
-    public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
-        if (f == null) return;
 
-        String tipo = (f.tipo == null || f.tipo.isBlank()) ? "R" : f.tipo;
+@Override
+public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
+    if (f == null) return;
 
-        // Aseguramos array de 12 posiciones
-        BigDecimal[] m = (f.impRealMes != null && f.impRealMes.length >= 12)
-                ? f.impRealMes
-                : new BigDecimal[12];
+    // Para el flujo REAL queremos que comparta la misma fila que el proyectado,
+    // por eso forzamos Tipo = 'M' (igual que saveOrUpdateProyectado).
+    String tipo = "M";
 
-        BigDecimal ene = nz(m[0]);
-        BigDecimal feb = nz(m[1]);
-        BigDecimal mar = nz(m[2]);
-        BigDecimal abr = nz(m[3]);
-        BigDecimal may = nz(m[4]);
-        BigDecimal jun = nz(m[5]);
-        BigDecimal jul = nz(m[6]);
-        BigDecimal ago = nz(m[7]);
-        BigDecimal sep = nz(m[8]);
-        BigDecimal oct = nz(m[9]);
-        BigDecimal nov = nz(m[10]);
-        BigDecimal dic = nz(m[11]);
+    // Aseguramos array de 12 posiciones (ene..dic)
+    BigDecimal[] m = (f.impRealMes != null && f.impRealMes.length >= 12)
+            ? f.impRealMes
+            : new BigDecimal[12];
 
-        BigDecimal acum = ene
-                .add(feb).add(mar).add(abr).add(may).add(jun)
-                .add(jul).add(ago).add(sep).add(oct).add(nov).add(dic);
+    BigDecimal ene = nz(m[0]);
+    BigDecimal feb = nz(m[1]);
+    BigDecimal mar = nz(m[2]);
+    BigDecimal abr = nz(m[3]);
+    BigDecimal may = nz(m[4]);
+    BigDecimal jun = nz(m[5]);
+    BigDecimal jul = nz(m[6]);
+    BigDecimal ago = nz(m[7]);
+    BigDecimal sep = nz(m[8]);
+    BigDecimal oct = nz(m[9]);
+    BigDecimal nov = nz(m[10]);
+    BigDecimal dic = nz(m[11]);
 
-        try (Connection cn = DBConnection.getInstance().getConnection()) {
+    // Suma sólo del año actual (los 12 meses reales)
+    BigDecimal sumaAnual = ene
+            .add(feb).add(mar).add(abr).add(may).add(jun)
+            .add(jul).add(ago).add(sep).add(oct).add(nov).add(dic);
 
-            // 1) Intentar UPDATE en FLUJOCAJA_DET (columnas reales)
-            String upd = """
-                UPDATE FLUJOCAJA_DET
-                   SET ImpRealEne  = ?,
-                       ImpRealFeb  = ?,
-                       ImpRealMar  = ?,
-                       ImpRealAbr  = ?,
-                       ImpRealMay  = ?,
-                       ImpRealJun  = ?,
-                       ImpRealJul  = ?,
-                       ImpRealAgo  = ?,
-                       ImpRealSep  = ?,
-                       ImpRealOct  = ?,
-                       ImpRealNov  = ?,
-                       ImpRealDic  = ?,
-                       ImpRealAcum = ?
-                 WHERE Anno       = ?
-                   AND CodCia     = ?
-                   AND CodPyto    = ?
-                   AND IngEgr     = ?
-                   AND Tipo       = ?
-                   AND CodPartida = ?
+    try (Connection cn = DBConnection.getInstance().getConnection()) {
+
+        // -----------------------------------------------------------------
+        // 1) Calcular ImpRealIni = ImpRealAcum del año anterior (Y-1)
+        // -----------------------------------------------------------------
+        BigDecimal impRealIni = BigDecimal.ZERO;
+
+        String sqlIni = """
+            SELECT ImpRealAcum
+              FROM FLUJOCAJA_DET
+             WHERE Anno       = ?
+               AND CodCia     = ?
+               AND CodPyto    = ?
+               AND IngEgr     = ?
+               AND Tipo       = ?
+               AND CodPartida = ?
+        """;
+
+        try (PreparedStatement psIni = cn.prepareStatement(sqlIni)) {
+            psIni.setInt(1, f.anno - 1);   // año anterior
+            psIni.setInt(2, f.codCia);
+            psIni.setInt(3, f.codPyto);
+            psIni.setString(4, f.ingEgr);
+            psIni.setString(5, tipo);
+            psIni.setInt(6, f.codPartida);
+
+            try (ResultSet rs = psIni.executeQuery()) {
+                if (rs.next()) {
+                    BigDecimal prev = rs.getBigDecimal(1);
+                    if (prev != null) {
+                        impRealIni = prev;
+                    }
+                }
+            }
+        }
+
+        // ImpRealAcum = acumulado anterior + año actual
+        BigDecimal impRealAcum = impRealIni.add(sumaAnual);
+
+        // -----------------------------------------------------------------
+        // 2) Intentar UPDATE en FLUJOCAJA_DET (columnas reales)
+        // -----------------------------------------------------------------
+        String upd = """
+            UPDATE FLUJOCAJA_DET
+               SET ImpRealIni  = ?,
+                   ImpRealEne  = ?,
+                   ImpRealFeb  = ?,
+                   ImpRealMar  = ?,
+                   ImpRealAbr  = ?,
+                   ImpRealMay  = ?,
+                   ImpRealJun  = ?,
+                   ImpRealJul  = ?,
+                   ImpRealAgo  = ?,
+                   ImpRealSep  = ?,
+                   ImpRealOct  = ?,
+                   ImpRealNov  = ?,
+                   ImpRealDic  = ?,
+                   ImpRealAcum = ?
+             WHERE Anno       = ?
+               AND CodCia     = ?
+               AND CodPyto    = ?
+               AND IngEgr     = ?
+               AND Tipo       = ?
+               AND CodPartida = ?
+        """;
+
+        int rows;
+        try (PreparedStatement ps = cn.prepareStatement(upd)) {
+            int i = 1;
+            ps.setBigDecimal(i++, impRealIni);
+            ps.setBigDecimal(i++, ene);
+            ps.setBigDecimal(i++, feb);
+            ps.setBigDecimal(i++, mar);
+            ps.setBigDecimal(i++, abr);
+            ps.setBigDecimal(i++, may);
+            ps.setBigDecimal(i++, jun);
+            ps.setBigDecimal(i++, jul);
+            ps.setBigDecimal(i++, ago);
+            ps.setBigDecimal(i++, sep);
+            ps.setBigDecimal(i++, oct);
+            ps.setBigDecimal(i++, nov);
+            ps.setBigDecimal(i++, dic);
+            ps.setBigDecimal(i++, impRealAcum);
+
+            ps.setInt(i++, f.anno);
+            ps.setInt(i++, f.codCia);
+            ps.setInt(i++, f.codPyto);
+            ps.setString(i++, f.ingEgr);
+            ps.setString(i++, tipo);
+            ps.setInt(i++, f.codPartida);
+
+            rows = ps.executeUpdate();
+        }
+
+        // -----------------------------------------------------------------
+        // 3) Si no existe detalle, garantizar padre en FLUJOCAJA e INSERT
+        // -----------------------------------------------------------------
+        if (rows == 0) {
+            // Crea la fila padre en FLUJOCAJA si aún no existe
+            ensureFlujoCajaRow(
+                    cn,
+                    f.codCia,
+                    f.codPyto,
+                    f.ingEgr,
+                    tipo,
+                    f.codPartida,
+                    f.orden
+            );
+
+            String ins = """
+                INSERT INTO FLUJOCAJA_DET (
+                    Anno, CodCia, CodPyto, IngEgr, Tipo, CodPartida, Orden,
+                    ImpIni,     ImpRealIni,
+                    ImpEne,     ImpRealEne,
+                    ImpFeb,     ImpRealFeb,
+                    ImpMar,     ImpRealMar,
+                    ImpAbr,     ImpRealAbr,
+                    ImpMay,     ImpRealMay,
+                    ImpJun,     ImpRealJun,
+                    ImpJul,     ImpRealJul,
+                    ImpAgo,     ImpRealAgo,
+                    ImpSep,     ImpRealSep,
+                    ImpOct,     ImpRealOct,
+                    ImpNov,     ImpRealNov,
+                    ImpDic,     ImpRealDic,
+                    ImpAcum,    ImpRealAcum
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?,
+                    0, ?,      -- ImpIni = 0, ImpRealIni = ?
+                    0, ?,      -- ImpEne / ImpRealEne
+                    0, ?,      -- ImpFeb / ImpRealFeb
+                    0, ?,      -- ImpMar / ImpRealMar
+                    0, ?,      -- ImpAbr / ImpRealAbr
+                    0, ?,      -- ImpMay / ImpRealMay
+                    0, ?,      -- ImpJun / ImpRealJun
+                    0, ?,      -- ImpJul / ImpRealJul
+                    0, ?,      -- ImpAgo / ImpRealAgo
+                    0, ?,      -- ImpSep / ImpRealSep
+                    0, ?,      -- ImpOct / ImpRealOct
+                    0, ?,      -- ImpNov / ImpRealNov
+                    0, ?,      -- ImpDic / ImpRealDic
+                    0, ?       -- ImpAcum = 0, ImpRealAcum = ?
+                )
             """;
 
-            int rows;
-            try (PreparedStatement ps = cn.prepareStatement(upd)) {
+            try (PreparedStatement ps = cn.prepareStatement(ins)) {
                 int i = 1;
-                ps.setBigDecimal(i++, ene);
-                ps.setBigDecimal(i++, feb);
-                ps.setBigDecimal(i++, mar);
-                ps.setBigDecimal(i++, abr);
-                ps.setBigDecimal(i++, may);
-                ps.setBigDecimal(i++, jun);
-                ps.setBigDecimal(i++, jul);
-                ps.setBigDecimal(i++, ago);
-                ps.setBigDecimal(i++, sep);
-                ps.setBigDecimal(i++, oct);
-                ps.setBigDecimal(i++, nov);
-                ps.setBigDecimal(i++, dic);
-                ps.setBigDecimal(i++, acum);
-
                 ps.setInt(i++, f.anno);
                 ps.setInt(i++, f.codCia);
                 ps.setInt(i++, f.codPyto);
                 ps.setString(i++, f.ingEgr);
                 ps.setString(i++, tipo);
                 ps.setInt(i++, f.codPartida);
+                ps.setInt(i++, f.orden <= 0 ? 1 : f.orden);
 
-                rows = ps.executeUpdate();
-            }
-
-            // 2) Si no existe detalle, garantizamos padre en FLUJOCAJA y hacemos INSERT
-            if (rows == 0) {
-                ensureFlujoCajaRow(
-                        cn,
-                        f.codCia,
-                        f.codPyto,
-                        f.ingEgr,
-                        tipo,
-                        f.codPartida,
-                        f.orden
-                );
-
-                String ins = """
-                    INSERT INTO FLUJOCAJA_DET (
-                        Anno, CodCia, CodPyto, IngEgr, Tipo, CodPartida, Orden,
-                        ImpIni,     ImpRealIni,
-                        ImpEne,     ImpRealEne,
-                        ImpFeb,     ImpRealFeb,
-                        ImpMar,     ImpRealMar,
-                        ImpAbr,     ImpRealAbr,
-                        ImpMay,     ImpRealMay,
-                        ImpJun,     ImpRealJun,
-                        ImpJul,     ImpRealJul,
-                        ImpAgo,     ImpRealAgo,
-                        ImpSep,     ImpRealSep,
-                        ImpOct,     ImpRealOct,
-                        ImpNov,     ImpRealNov,
-                        ImpDic,     ImpRealDic,
-                        ImpAcum,    ImpRealAcum
-                    ) VALUES (
-                        ?, ?, ?, ?, ?, ?, ?,
-                        0, 0,
-                        0, ?,
-                        0, ?,
-                        0, ?,
-                        0, ?,
-                        0, ?,
-                        0, ?,
-                        0, ?,
-                        0, ?,
-                        0, ?,
-                        0, ?,
-                        0, ?,
-                        0, ?,
-                        0, ?
-                    )
-                """;
-
-                try (PreparedStatement ps = cn.prepareStatement(ins)) {
-                    int i = 1;
-                    ps.setInt(i++, f.anno);
-                    ps.setInt(i++, f.codCia);
-                    ps.setInt(i++, f.codPyto);
-                    ps.setString(i++, f.ingEgr);
-                    ps.setString(i++, tipo);
-                    ps.setInt(i++, f.codPartida);
-                    ps.setInt(i++, f.orden <= 0 ? 1 : f.orden);
-
-                    ps.setBigDecimal(i++, ene);
-                    ps.setBigDecimal(i++, feb);
-                    ps.setBigDecimal(i++, mar);
-                    ps.setBigDecimal(i++, abr);
-                    ps.setBigDecimal(i++, may);
-                    ps.setBigDecimal(i++, jun);
-                    ps.setBigDecimal(i++, jul);
-                    ps.setBigDecimal(i++, ago);
-                    ps.setBigDecimal(i++, sep);
-                    ps.setBigDecimal(i++, oct);
-                    ps.setBigDecimal(i++, nov);
-                    ps.setBigDecimal(i++, dic);
-                    ps.setBigDecimal(i++, acum);
-
-                    ps.executeUpdate();
-                }
-            }
-        }
-    }
-
-    // ============================================================
-    //  FLUJO PROYECTADO  (NUEVO)
-    // ============================================================
-    @Override
-    public void saveOrUpdateProyectado(FlujoCajaDetProySaveDTO f) throws Exception {
-        if (f == null) return;
-
-        // Tipo de fila (M, A, etc.)
-        String tipo = (f.tipo == null || f.tipo.isBlank()) ? "M" : f.tipo;
-
-        // Aseguramos array de 12 posiciones
-        BigDecimal[] m = (f.impMes != null && f.impMes.length >= 12)
-                ? f.impMes
-                : new BigDecimal[12];
-
-        BigDecimal ene = nz(m[0]);
-        BigDecimal feb = nz(m[1]);
-        BigDecimal mar = nz(m[2]);
-        BigDecimal abr = nz(m[3]);
-        BigDecimal may = nz(m[4]);
-        BigDecimal jun = nz(m[5]);
-        BigDecimal jul = nz(m[6]);
-        BigDecimal ago = nz(m[7]);
-        BigDecimal sep = nz(m[8]);
-        BigDecimal oct = nz(m[9]);
-        BigDecimal nov = nz(m[10]);
-        BigDecimal dic = nz(m[11]);
-
-        BigDecimal acum = ene
-                .add(feb).add(mar).add(abr).add(may).add(jun)
-                .add(jul).add(ago).add(sep).add(oct).add(nov).add(dic);
-
-        try (Connection cn = DBConnection.getInstance().getConnection()) {
-
-            // 1) UPDATE sobre columnas PROYECTADAS (ImpEne..ImpDic, ImpAcum)
-            //    13 SET + 6 WHERE = 19 parámetros
-            String upd = """
-                UPDATE FLUJOCAJA_DET
-                   SET ImpEne  = ?,
-                       ImpFeb  = ?,
-                       ImpMar  = ?,
-                       ImpAbr  = ?,
-                       ImpMay  = ?,
-                       ImpJun  = ?,
-                       ImpJul  = ?,
-                       ImpAgo  = ?,
-                       ImpSep  = ?,
-                       ImpOct  = ?,
-                       ImpNov  = ?,
-                       ImpDic  = ?,
-                       ImpAcum = ?
-                 WHERE Anno       = ?
-                   AND CodCia     = ?
-                   AND CodPyto    = ?
-                   AND IngEgr     = ?
-                   AND Tipo       = ?
-                   AND CodPartida = ?
-            """;
-
-            int rows;
-            try (PreparedStatement ps = cn.prepareStatement(upd)) {
-                int i = 1;
+                ps.setBigDecimal(i++, impRealIni);
                 ps.setBigDecimal(i++, ene);
                 ps.setBigDecimal(i++, feb);
                 ps.setBigDecimal(i++, mar);
@@ -247,100 +215,225 @@ public class FlujoCajaDetDAOImpl implements FlujoCajaDetDAO {  // 👈 IMPORTANT
                 ps.setBigDecimal(i++, oct);
                 ps.setBigDecimal(i++, nov);
                 ps.setBigDecimal(i++, dic);
-                ps.setBigDecimal(i++, acum);   // 13
+                ps.setBigDecimal(i++, impRealAcum);
 
-                ps.setInt(i++, f.anno);        // 14
-                ps.setInt(i++, f.codCia);      // 15
-                ps.setInt(i++, f.codPyto);     // 16
-                ps.setString(i++, f.ingEgr);   // 17
-                ps.setString(i++, tipo);       // 18
-                ps.setInt(i++, f.codPartida);  // 19
-
-                rows = ps.executeUpdate();
-            }
-
-            // 2) Si no existe detalle, garantizamos padre en FLUJOCAJA y hacemos INSERT
-            if (rows == 0) {
-                ensureFlujoCajaRow(
-                        cn,
-                        f.codCia,
-                        f.codPyto,
-                        f.ingEgr,
-                        tipo,
-                        f.codPartida,
-                        f.orden
-                );
-
-                // 7 primeros ? + 12 meses + 1 acum = 20 parámetros
-                String ins = """
-                    INSERT INTO FLUJOCAJA_DET (
-                        Anno, CodCia, CodPyto, IngEgr, Tipo, CodPartida, Orden,
-                        ImpIni,     ImpRealIni,
-                        ImpEne,     ImpRealEne,
-                        ImpFeb,     ImpRealFeb,
-                        ImpMar,     ImpRealMar,
-                        ImpAbr,     ImpRealAbr,
-                        ImpMay,     ImpRealMay,
-                        ImpJun,     ImpRealJun,
-                        ImpJul,     ImpRealJul,
-                        ImpAgo,     ImpRealAgo,
-                        ImpSep,     ImpRealSep,
-                        ImpOct,     ImpRealOct,
-                        ImpNov,     ImpRealNov,
-                        ImpDic,     ImpRealDic,
-                        ImpAcum,    ImpRealAcum
-                    ) VALUES (
-                        ?, ?, ?, ?, ?, ?, ?,   -- 7
-                        0, 0,
-                        ?, 0,                  -- ene
-                        ?, 0,                  -- feb
-                        ?, 0,                  -- mar
-                        ?, 0,                  -- abr
-                        ?, 0,                  -- may
-                        ?, 0,                  -- jun
-                        ?, 0,                  -- jul
-                        ?, 0,                  -- ago
-                        ?, 0,                  -- sep
-                        ?, 0,                  -- oct
-                        ?, 0,                  -- nov
-                        ?, 0,                  -- dic
-                        ?, 0                   -- acum
-                    )
-                """;
-
-                try (PreparedStatement ps = cn.prepareStatement(ins)) {
-                    int i = 1;
-                    // 7 primeros
-                    ps.setInt(i++, f.anno);                       // 1
-                    ps.setInt(i++, f.codCia);                     // 2
-                    ps.setInt(i++, f.codPyto);                    // 3
-                    ps.setString(i++, f.ingEgr);                  // 4
-                    ps.setString(i++, tipo);                      // 5
-                    ps.setInt(i++, f.codPartida);                 // 6
-                    ps.setInt(i++, f.orden <= 0 ? 1 : f.orden);   // 7
-
-                    // 12 meses proyectados
-                    ps.setBigDecimal(i++, ene);                   // 8
-                    ps.setBigDecimal(i++, feb);                   // 9
-                    ps.setBigDecimal(i++, mar);                   // 10
-                    ps.setBigDecimal(i++, abr);                   // 11
-                    ps.setBigDecimal(i++, may);                   // 12
-                    ps.setBigDecimal(i++, jun);                   // 13
-                    ps.setBigDecimal(i++, jul);                   // 14
-                    ps.setBigDecimal(i++, ago);                   // 15
-                    ps.setBigDecimal(i++, sep);                   // 16
-                    ps.setBigDecimal(i++, oct);                   // 17
-                    ps.setBigDecimal(i++, nov);                   // 18
-                    ps.setBigDecimal(i++, dic);                   // 19
-
-                    // ImpAcum proyectado
-                    ps.setBigDecimal(i++, acum);                  // 20
-
-                    ps.executeUpdate();
-                }
+                ps.executeUpdate();
             }
         }
     }
+}
+// ============================================================
+//  FLUJO PROYECTADO  (ImpIni / ImpAcum por año)
+// ============================================================
+@Override
+public void saveOrUpdateProyectado(FlujoCajaDetProySaveDTO f) throws Exception {
+    if (f == null) return;
+
+    // Tipo de fila (M, A, etc.) – por defecto "M"
+    String tipo = (f.tipo == null || f.tipo.isBlank()) ? "M" : f.tipo;
+
+    // Aseguramos array de 12 posiciones (ene..dic)
+    BigDecimal[] m = (f.impMes != null && f.impMes.length >= 12)
+            ? f.impMes
+            : new BigDecimal[12];
+
+    BigDecimal ene = nz(m[0]);
+    BigDecimal feb = nz(m[1]);
+    BigDecimal mar = nz(m[2]);
+    BigDecimal abr = nz(m[3]);
+    BigDecimal may = nz(m[4]);
+    BigDecimal jun = nz(m[5]);
+    BigDecimal jul = nz(m[6]);
+    BigDecimal ago = nz(m[7]);
+    BigDecimal sep = nz(m[8]);
+    BigDecimal oct = nz(m[9]);
+    BigDecimal nov = nz(m[10]);
+    BigDecimal dic = nz(m[11]);
+
+    // Suma SOLO del año actual (proyectado)
+    BigDecimal sumaAnual = ene
+            .add(feb).add(mar).add(abr).add(may).add(jun)
+            .add(jul).add(ago).add(sep).add(oct).add(nov).add(dic);
+
+    try (Connection cn = DBConnection.getInstance().getConnection()) {
+
+        // ---------------------------------------------------------
+        // 1) Calcular ImpIni = ImpAcum del año anterior (Y-1)
+        // ---------------------------------------------------------
+        BigDecimal impIni = BigDecimal.ZERO;
+
+        String sqlIni = """
+            SELECT ImpAcum
+              FROM FLUJOCAJA_DET
+             WHERE Anno       = ?
+               AND CodCia     = ?
+               AND CodPyto    = ?
+               AND IngEgr     = ?
+               AND Tipo       = ?
+               AND CodPartida = ?
+        """;
+
+        try (PreparedStatement psIni = cn.prepareStatement(sqlIni)) {
+            psIni.setInt(1, f.anno - 1);  // año anterior
+            psIni.setInt(2, f.codCia);
+            psIni.setInt(3, f.codPyto);
+            psIni.setString(4, f.ingEgr);
+            psIni.setString(5, tipo);
+            psIni.setInt(6, f.codPartida);
+
+            try (ResultSet rs = psIni.executeQuery()) {
+                if (rs.next()) {
+                    BigDecimal prev = rs.getBigDecimal(1);
+                    if (prev != null) {
+                        impIni = prev;   // acumulado del año anterior
+                    }
+                }
+            }
+        }
+
+        // ImpAcum = acumulado anterior + año actual proyectado
+        BigDecimal impAcum = impIni.add(sumaAnual);
+
+        // ---------------------------------------------------------
+        // 2) Intentar UPDATE solo sobre columnas PROYECTADAS
+        // ---------------------------------------------------------
+        String upd = """
+            UPDATE FLUJOCAJA_DET
+               SET ImpIni  = ?,
+                   ImpEne  = ?,
+                   ImpFeb  = ?,
+                   ImpMar  = ?,
+                   ImpAbr  = ?,
+                   ImpMay  = ?,
+                   ImpJun  = ?,
+                   ImpJul  = ?,
+                   ImpAgo  = ?,
+                   ImpSep  = ?,
+                   ImpOct  = ?,
+                   ImpNov  = ?,
+                   ImpDic  = ?,
+                   ImpAcum = ?
+             WHERE Anno       = ?
+               AND CodCia     = ?
+               AND CodPyto    = ?
+               AND IngEgr     = ?
+               AND Tipo       = ?
+               AND CodPartida = ?
+        """;
+
+        int rows;
+        try (PreparedStatement ps = cn.prepareStatement(upd)) {
+            int i = 1;
+            ps.setBigDecimal(i++, impIni);
+            ps.setBigDecimal(i++, ene);
+            ps.setBigDecimal(i++, feb);
+            ps.setBigDecimal(i++, mar);
+            ps.setBigDecimal(i++, abr);
+            ps.setBigDecimal(i++, may);
+            ps.setBigDecimal(i++, jun);
+            ps.setBigDecimal(i++, jul);
+            ps.setBigDecimal(i++, ago);
+            ps.setBigDecimal(i++, sep);
+            ps.setBigDecimal(i++, oct);
+            ps.setBigDecimal(i++, nov);
+            ps.setBigDecimal(i++, dic);
+            ps.setBigDecimal(i++, impAcum);
+
+            ps.setInt(i++, f.anno);
+            ps.setInt(i++, f.codCia);
+            ps.setInt(i++, f.codPyto);
+            ps.setString(i++, f.ingEgr);
+            ps.setString(i++, tipo);
+            ps.setInt(i++, f.codPartida);
+
+            rows = ps.executeUpdate();
+        }
+
+        // ---------------------------------------------------------
+        // 3) Si no existe fila, crear padre FLUJOCAJA e INSERT
+        // ---------------------------------------------------------
+        if (rows == 0) {
+
+            // Asegurar fila padre en FLUJOCAJA
+            ensureFlujoCajaRow(
+                    cn,
+                    f.codCia,
+                    f.codPyto,
+                    f.ingEgr,
+                    tipo,
+                    f.codPartida,
+                    f.orden
+            );
+
+            String ins = """
+                INSERT INTO FLUJOCAJA_DET (
+                    Anno, CodCia, CodPyto, IngEgr, Tipo, CodPartida, Orden,
+                    ImpIni,     ImpRealIni,
+                    ImpEne,     ImpRealEne,
+                    ImpFeb,     ImpRealFeb,
+                    ImpMar,     ImpRealMar,
+                    ImpAbr,     ImpRealAbr,
+                    ImpMay,     ImpRealMay,
+                    ImpJun,     ImpRealJun,
+                    ImpJul,     ImpRealJul,
+                    ImpAgo,     ImpRealAgo,
+                    ImpSep,     ImpRealSep,
+                    ImpOct,     ImpRealOct,
+                    ImpNov,     ImpRealNov,
+                    ImpDic,     ImpRealDic,
+                    ImpAcum,    ImpRealAcum
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?,
+                    ?, 0,
+                    ?, 0,
+                    ?, 0,
+                    ?, 0,
+                    ?, 0,
+                    ?, 0,
+                    ?, 0,
+                    ?, 0,
+                    ?, 0,
+                    ?, 0,
+                    ?, 0,
+                    ?, 0,
+                    ?, 0,
+                    ?, 0
+                )
+            """;
+
+            try (PreparedStatement ps = cn.prepareStatement(ins)) {
+                int i = 1;
+                ps.setInt(i++, f.anno);
+                ps.setInt(i++, f.codCia);
+                ps.setInt(i++, f.codPyto);
+                ps.setString(i++, f.ingEgr);
+                ps.setString(i++, tipo);
+                ps.setInt(i++, f.codPartida);
+                ps.setInt(i++, f.orden <= 0 ? 1 : f.orden);
+
+                ps.setBigDecimal(i++, impIni);
+                ps.setBigDecimal(i++, ene);
+                ps.setBigDecimal(i++, feb);
+                ps.setBigDecimal(i++, mar);
+                ps.setBigDecimal(i++, abr);
+                ps.setBigDecimal(i++, may);
+                ps.setBigDecimal(i++, jun);
+                ps.setBigDecimal(i++, jul);
+                ps.setBigDecimal(i++, ago);
+                ps.setBigDecimal(i++, sep);
+                ps.setBigDecimal(i++, oct);
+                ps.setBigDecimal(i++, nov);
+                ps.setBigDecimal(i++, dic);
+                ps.setBigDecimal(i++, impAcum);
+
+                ps.executeUpdate();
+            }
+        }
+    }
+}
+
+
+ 
 
     // ============================================================
     //  HELPERS COMUNES

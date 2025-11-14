@@ -14,6 +14,8 @@ let annoSeleccionado = null;
 // Mapa para comparar contra flujo proyectado
 let mapaProyectado = {};
 let comparacionActiva = false; // toggle del botón
+// Mapa: año -> (mapa de valores por partida)
+let valoresRealesPorAnno = {};  // { 2023: { codPartida: [ene..dic] }, 2024: ... }
 
 // --- referencias de la UI ---
 const proyectoInfoEl = document.getElementById("proyectoInfo");
@@ -210,6 +212,7 @@ function resetTabla(resetProyecto = false) {
   annoSeleccionado = null;
   mapaProyectado = {};
   comparacionActiva = false;
+  valoresRealesPorAnno = {};
 
   if (resetProyecto) {
     document.getElementById("selectProyecto").value = "";
@@ -252,6 +255,85 @@ async function cargarProyectos() {
     throw err;
   }
 }
+
+async function cargarValoresRealesDeTodosLosAnios() {
+  if (!proyectoSeleccionado) {
+    setStatus("Seleccione un proyecto primero.");
+    return;
+  }
+
+  const codCia  = proyectoSeleccionado.codCia;
+  const codPyto = proyectoSeleccionado.codPyto;
+
+  const yearSelect = document.getElementById("yearSelect");
+  if (!yearSelect) return;
+
+  valoresRealesPorAnno = {}; // limpiamos cache para este proyecto
+
+  const anios = Array.from(yearSelect.options)
+    .map(o => parseInt(o.value, 10))
+    .filter(n => !isNaN(n));
+
+  for (const anio of anios) {
+    const url = `${API_BASE}/valores/real?codCia=${codCia}&codPyto=${codPyto}&anno=${anio}`;
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      console.error(`Error cargando valores reales ${anio}:`, txt || `HTTP ${res.status}`);
+      continue;
+    }
+    const data = await res.json();             // { ... filas ... }
+    valoresRealesPorAnno[anio] = data;        // 👈 guardamos en cache
+  }
+
+  setStatus("Valores reales cargados para todos los años.");
+}
+
+async function asegurarValoresParaAnno(anno) {
+  // Si ya tenemos ese año en cache, no hacemos nada
+  if (valoresRealesPorAnno[anno]) return;
+
+  if (!proyectoSeleccionado) return;
+
+  const codCia  = proyectoSeleccionado.codCia;
+  const codPyto = proyectoSeleccionado.codPyto;
+
+  const url = `${API_BASE}/valores/real?codCia=${codCia}&codPyto=${codPyto}&anno=${anno}`;
+  const res = await fetch(url, { mode: "cors" });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    console.error(`Error cargando valores reales ${anno}:`, txt || `HTTP ${res.status}`);
+    return;
+  }
+
+  const data = await res.json();
+  valoresRealesPorAnno[anno] = data; // guardamos en cache
+}
+
+
+async function aplicarValoresDesdeCache(anno) {
+  // Nos aseguramos de tener datos en cache para este año
+  await asegurarValoresParaAnno(anno);
+
+  const data = valoresRealesPorAnno[anno];
+
+  resetCeldasNumericas();
+  resetComparacionVisual();
+
+  if (!data) {
+    // no hubo datos (ni en cache ni del backend)
+    return;
+  }
+
+  data.forEach(row => {
+    if (row.ingEgr === "N" || row.codPartida === 0) {
+      pintarFilaNeto(row.valores);
+    } else {
+      pintarFilaPartidaValores(row.codPartida, row.valores);
+    }
+  });
+}
+
 
 function setupEventListeners() {
   const selectProyecto = document.getElementById("selectProyecto");
@@ -355,81 +437,75 @@ function setupEventListeners() {
     }
   });
 
-  const btnPrev = document.getElementById("btnYearPrev");
-  if (btnPrev) {
-      btnPrev.addEventListener("click", () => {
-      if (!proyectoSeleccionado) return;
-      if (annoSeleccionado > proyectoSeleccionado.annoIni) {
+const btnPrev = document.getElementById("btnYearPrev");
+if (btnPrev) {
+  btnPrev.addEventListener("click", async () => {   // 👈 async
+    if (!proyectoSeleccionado) return;
+    if (annoSeleccionado > proyectoSeleccionado.annoIni) {
       annoSeleccionado--;
       const yearDisplay = document.getElementById("yearDisplay");
       if (yearDisplay) yearDisplay.textContent = String(annoSeleccionado);
 
-    // solo limpiamos la tabla y colores
-    resetCeldasNumericas();
-    resetComparacionVisual();
-  }
-});
+      await aplicarValoresDesdeCache(annoSeleccionado);   // 👈 await
+    }
+  });
+}
 
-  }
-
-  const btnNext = document.getElementById("btnYearNext");
-  if (btnNext) {
-    btnNext.addEventListener("click", () => {
+const btnNext = document.getElementById("btnYearNext");
+if (btnNext) {
+  btnNext.addEventListener("click", async () => {   // 👈 async
     if (!proyectoSeleccionado) return;
     if (annoSeleccionado < proyectoSeleccionado.annoFin) {
       annoSeleccionado++;
       const yearDisplay = document.getElementById("yearDisplay");
       if (yearDisplay) yearDisplay.textContent = String(annoSeleccionado);
 
-    // solo limpiamos la tabla y colores
-    resetCeldasNumericas();
-    resetComparacionVisual();
-  }
-});
+      await aplicarValoresDesdeCache(annoSeleccionado);   // 👈 await
+    }
+  });
+}
 
-  }
 
-  const btnValores = document.getElementById("btnValores");
-  if (btnValores) {
-    btnValores.addEventListener("click", async () => {
-      if (!proyectoSeleccionado || !annoSeleccionado) {
-        alert("Seleccione proyecto y año.");
-        return;
+const btnValores = document.getElementById("btnValores");
+if (btnValores) {
+  btnValores.addEventListener("click", async () => {
+    if (!proyectoSeleccionado) {
+      alert("Seleccione un proyecto.");
+      return;
+    }
+    btnValores.disabled = true;
+    const old = btnValores.textContent;
+    btnValores.textContent = "Calculando...";
+
+    try {
+      await cargarValoresRealesDeTodosLosAnios();      // 👈 carga TODOS los años
+      if (annoSeleccionado) {
+        aplicarValoresDesdeCache(annoSeleccionado);    // 👈 pinta el año actual
       }
-      btnValores.disabled = true;
-      const old = btnValores.textContent;
-      btnValores.textContent = "Calculando...";
-      try {
-        await cargarValoresReales(
-          proyectoSeleccionado.codCia,
-          proyectoSeleccionado.codPyto,
-          annoSeleccionado
-        );
-        setStatus(`Valores reales ${annoSeleccionado} cargados.`);
-      } catch (e) {
-        console.error(e);
-        alert("No se pudieron cargar los valores: " + e.message);
-      } finally {
-        btnValores.textContent = old;
-        btnValores.disabled = false;
-      }
-    });
-  }
+    } catch (e) {
+      console.error(e);
+      alert("No se pudieron cargar los valores: " + e.message);
+    } finally {
+      btnValores.textContent = old;
+      btnValores.disabled = false;
+    }
+  });
+}
 
-  const yearSelectEl2 = document.getElementById("yearSelect");
-  if (yearSelectEl2) {
-    yearSelectEl2.addEventListener("change", e => {
+
+const yearSelectEl2 = document.getElementById("yearSelect");
+if (yearSelectEl2) {
+  yearSelectEl2.addEventListener("change", async e => {  // 👈 async
     if (!proyectoSeleccionado) return;
     annoSeleccionado = parseInt(e.target.value, 10);
     const yd = document.getElementById("yearDisplay");
     if (yd) yd.textContent = String(annoSeleccionado);
 
-  // al cambiar de año, tabla limpia hasta que tú pulses "Valores"
-  resetCeldasNumericas();
-  resetComparacionVisual();
-});
+    await aplicarValoresDesdeCache(annoSeleccionado);    // 👈 await
+  });
+}
 
-  }
+
 
   // Botón Guardar
   const btnGuardar = document.getElementById("btnGuardar");
@@ -750,35 +826,6 @@ function resetComparacionVisual() {
   limpiarComparacionCeldas();
 }
 
-// === cargar valores reales para un año y pintar la tabla actual ===
-async function cargarValoresReales(codCia, codPyto, anno) {
-  if (!conceptosCargados.ingresos.length && !conceptosCargados.egresos.length) {
-    setStatus("Primero carga los conceptos (botón 'Concepto').");
-    return;
-  }
-
-  const url = `${API_BASE}/valores/real?codCia=${codCia}&codPyto=${codPyto}&anno=${anno}`;
-  const res = await fetch(url, { mode: "cors" });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} ${res.statusText} ${txt}`);
-  }
-  const data = await res.json();
-
-  resetCeldasNumericas();
-  // 🆕 cada vez que cambio de año/valores, apago la comparación y dejo el botón coherente
-  resetComparacionVisual();
-
-  data.forEach(row => {
-    if (row.ingEgr === "N" || row.codPartida === 0) {
-      pintarFilaNeto(row.valores);
-    } else {
-      pintarFilaPartidaValores(row.codPartida, row.valores);
-    }
-  });
-
-  // Las diferencias solo se muestran cuando el usuario presiona el botón
-}
 
 function resetCeldasNumericas() {
   const tbody = document.getElementById("bodyRows");

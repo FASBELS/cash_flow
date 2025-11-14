@@ -523,6 +523,55 @@ async function construirFilasParaAnnoProyDesdeBackend(anio) {
   return filas;
 }
 
+async function cargarValoresProyectadosDesdeBackend(anio) {
+  if (!proyectoSeleccionadoProy) return;
+
+  const { codCia, codPyto } = proyectoSeleccionadoProy;
+
+  const url = `${API_BASE}/flujo-proyectado/valores?codCia=${codCia}&codPyto=${codPyto}&anno=${anio}`;
+
+  const res = await fetch(url, { mode: "cors" });
+
+  if (!res.ok) {
+    console.error("Error cargando valores proyectados:", await res.text());
+    return;
+  }
+
+  const data = await res.json(); // viene del backend con meses, suma, acum, total
+
+  const tbody = document.getElementById("bodyRowsProy");
+
+  data.forEach(f => {
+    // Buscar fila por codPartida + ingEgr
+    const selector = `tr.data-row-proy[data-ing-egr="${f.ingEgr}"] td.concepto-column[data-cod-partida="${f.codPartida}"]`;
+    const cell = tbody.querySelector(selector);
+    if (!cell) return;
+
+    const tr = cell.parentElement;
+    const tds = tr.querySelectorAll("td");
+
+    // === 12 meses ===
+    for (let i = 0; i < 12; i++) {
+      const val = f.valores.mes[i] || 0;
+      tds[i + 1].textContent = formatNumber(val);
+    }
+
+    // === Suma ===
+    tds[13].textContent = formatNumber(f.valores.suma || 0);
+
+    // === Acum. Ant. ===
+    tds[14].textContent = formatNumber(f.valores.acumAnt || 0);
+
+    // === Total ===
+    tds[15].textContent = formatNumber(f.valores.total || 0);
+  });
+
+  // Después de pintar, cachear este año
+  cachearTablaProyParaAnno(anio);
+
+  // Recalcular neto
+  recalcularFilaNetoProy();
+}
 
 function cachearTablaProyParaAnno(anio) {
   const tbody = document.getElementById("bodyRowsProy");
@@ -555,6 +604,33 @@ function cachearTablaProyParaAnno(anio) {
 
   cacheValoresProyPorAnno[anio] = filas;
 }
+function copiarAcumuladoAnteriorDesdeAnno(anioAnterior, anioActual) {
+  const filasPrev = cacheValoresProyPorAnno[anioAnterior];
+  if (!filasPrev) return;
+
+  const tbody = document.getElementById("bodyRowsProy");
+
+  filasPrev.forEach(reg => {
+    const selector = `tr.data-row-proy[data-ing-egr="${reg.ingEgr}"] td.concepto-column[data-cod-partida="${reg.codPartida}"]`;
+    const conceptCell = tbody.querySelector(selector);
+    if (!conceptCell) return;
+
+    const tr = conceptCell.parentElement;
+    const tds = tr.querySelectorAll("td");
+
+    // TOTAL del año anterior (colIndex=14)
+    // En cacheValoresProyPorAnno, valores[14] es TOTAL
+    const totalPrev = reg.valores[14] || 0;
+
+    // Columna ACUM. ANT. ES colIndex = 13 + 1 = 14
+    tds[14].textContent = formatNumber(totalPrev);
+
+    // Recalcular TOTAL nuevo (suma + acum ant)
+    const sumaActual = parseFloat((tds[13].textContent || "0").replace(/,/g, ""));
+    tds[15].textContent = formatNumber(sumaActual + totalPrev);
+  });
+}
+
 
 function restaurarTablaProyDesdeCache(anio) {
   const tbody = document.getElementById("bodyRowsProy");
@@ -813,6 +889,68 @@ function onBlurCeldaProy(ev) {
 // =========================
 // EVENTOS
 // =========================
+async function cargarValoresProyectadosDesdeBackend(anio) {
+  if (!proyectoSeleccionadoProy) {
+    alert("Seleccione un proyecto.");
+    return;
+  }
+
+  const tbody = document.getElementById("bodyRowsProy");
+  if (!tbody) return;
+
+  const { codCia, codPyto } = proyectoSeleccionadoProy;
+
+  const url = `${API_BASE}/flujo-proyectado/valores?codCia=${codCia}&codPyto=${codPyto}&anno=${anio}`;
+  console.log("[PROY] Cargando valores proyectados desde backend:", url);
+
+  const res = await fetch(url, { mode: "cors" });
+  if (!res.ok) {
+    console.error("Error al cargar valores proyectados:", await res.text());
+    alert("Error cargando valores.");
+    return;
+  }
+
+  const data = await res.json(); // Lista de FilaFlujoDTO
+
+  // RESETEAR TABLA ANTES DE PINTAR
+  limpiarValoresTablaProy();
+
+  data.forEach(f => {
+    const selector = `tr.data-row-proy[data-ing-egr="${f.ingEgr}"] td.concepto-column[data-cod-partida="${f.codPartida}"]`;
+    const cell = tbody.querySelector(selector);
+    if (!cell) return;
+
+    const tr = cell.parentElement;
+    const tds = tr.querySelectorAll("td");
+
+    // --- 12 meses ---
+    for (let i = 0; i < 12; i++) {
+      const val = f.valores?.mes?.[i] ?? 0;
+      tds[i + 1].textContent = formatNumber(val);
+    }
+
+    // --- Suma ---
+    tds[13].textContent = formatNumber(f.valores?.suma ?? 0);
+
+    // --- Acum. Ant. (ImpIni) ---
+    tds[14].textContent = formatNumber(f.valores?.acumAnt ?? 0);
+
+    // --- Total (ImpAcum) ---
+    tds[15].textContent = formatNumber(f.valores?.total ?? 0);
+  });
+
+  // Recalcular Padres y Neto
+  recalcularFilaNetoProy();
+
+  // Guardar año en cache
+  cachearTablaProyParaAnno(anio);
+  // Si existe el año anterior en cache → copiar Acum. Ant.
+if (cacheValoresProyPorAnno[anio - 1]) {
+  copiarAcumuladoAnteriorDesdeAnno(anio - 1, anio);
+}
+
+  setStatusProy(`Datos proyectados cargados desde BD para ${anio}.`);
+}
 
 function setupEventListenersProy() {
   const selectProyecto = document.getElementById("selectProyectoProy");
@@ -927,7 +1065,14 @@ function setupEventListenersProy() {
       setStatusProy(`Año ${annoSeleccionadoProy} seleccionado.`);
 
       // Restaurar valores desde cache
-      restaurarTablaProyDesdeCache(annoSeleccionadoProy);
+     if (cacheValoresProyPorAnno[nuevoAnno]) {
+        // ya existe cache → usarlo
+    restaurarTablaProyDesdeCache(nuevoAnno);
+      } else {
+        // no existe cache → cargar desde backend
+      cargarValoresProyectadosDesdeBackend(nuevoAnno);
+}
+
     });
   }
 
@@ -993,6 +1138,19 @@ function setupEventListenersProy() {
       guardarTodosLosAniosProy();
     });
   }
+
+  const btnCargarDatosProy = document.getElementById("btnCargarDatosProy");
+if (btnCargarDatosProy) {
+  btnCargarDatosProy.addEventListener("click", () => {
+    if (!proyectoSeleccionadoProy || !annoSeleccionadoProy) {
+      alert("Seleccione proyecto y año.");
+      return;
+    }
+
+    cargarValoresProyectadosDesdeBackend(annoSeleccionadoProy);
+  });
+}
+
 }
 
 const btnInicioProy = document.getElementById("btnInicioProy");
