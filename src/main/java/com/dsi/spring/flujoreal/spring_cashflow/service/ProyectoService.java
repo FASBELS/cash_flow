@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.ProyectoDAO;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.ProyectoDetalleDTO;
 import com.dsi.spring.flujoreal.spring_cashflow.factory.DAOFactory;
-import com.dsi.spring.flujoreal.spring_cashflow.model.Proyecto;
 
 @Service
 public class ProyectoService {
@@ -21,13 +20,13 @@ public class ProyectoService {
         this.proyectoDAO = f.getProyectoDAO();
     }
 
-    public List<Proyecto> listar() throws Exception {
+    public List<ProyectoDetalleDTO> listar() throws Exception {
         return proyectoDAO.listarProyectos();
     }
 
     public ProyectoDetalleDTO detalle(int codCia, int codPyto) throws Exception {
         // como tu DAO no tiene "obtenerPorId", buscamos en memoria tras listar
-        Proyecto base = proyectoDAO.listarProyectos().stream()
+        ProyectoDetalleDTO base = proyectoDAO.listarProyectos().stream()
                 .filter(p -> p.getCodPyto()==codPyto)
                 .findFirst()
                 .orElse(null);

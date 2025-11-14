@@ -10,31 +10,30 @@ import java.util.List;
 
 import com.dsi.spring.flujoreal.spring_cashflow.config.DBConnection;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.ProyectoDAO;
-import com.dsi.spring.flujoreal.spring_cashflow.model.Proyecto;
+import com.dsi.spring.flujoreal.spring_cashflow.dto.ProyectoDetalleDTO;
 
 public class ProyectoDAOImpl implements ProyectoDAO {
 
     @Override
-    public List<Proyecto> listarProyectos() throws Exception {
+    public List<ProyectoDetalleDTO> listarProyectos() throws Exception {
         String sql = """
-            SELECT CodPyto, NombPyto, AnnoIni, AnnoFin, Vigente
+            SELECT CodPyto, NombPyto, AnnoIni, AnnoFin
             FROM PROYECTO
             WHERE Vigente = 'S'
             ORDER BY NombPyto
         """;
 
-        List<Proyecto> out = new ArrayList<>();
+        List<ProyectoDetalleDTO> out = new ArrayList<>();
         try (Connection cn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = cn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
-                Proyecto p = new Proyecto();
+                ProyectoDetalleDTO p = new ProyectoDetalleDTO();
                 p.setCodPyto(rs.getInt("CodPyto"));
                 p.setNombPyto(rs.getString("NombPyto"));
                 p.setAnnoIni(rs.getInt("AnnoIni"));
                 p.setAnnoFin(rs.getInt("AnnoFin"));
-                p.setVigente(rs.getString("Vigente"));
                 out.add(p);
             }
             return out;

@@ -2,7 +2,7 @@ package com.dsi.spring.flujoreal.spring_cashflow.controller;
 
 import com.dsi.spring.flujoreal.spring_cashflow.factory.DAOFactory;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.ProyectoDAO;
-import com.dsi.spring.flujoreal.spring_cashflow.model.Proyecto;
+import com.dsi.spring.flujoreal.spring_cashflow.dto.ProyectoDetalleDTO;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,7 +22,7 @@ public class ProyectoController {
     @GetMapping
     public ResponseEntity<?> listarProyectos() {
         try {
-            List<Proyecto> proyectos = proyectoDAO.listarProyectos();
+            List<ProyectoDetalleDTO> proyectos = proyectoDAO.listarProyectos();
             return ResponseEntity.ok(proyectos);
         } catch (Exception e) {
             e.printStackTrace();
