@@ -15,28 +15,35 @@
             <!-- Se llenará desde JS -->
         </div>
 
-        <div class="controls-container">
-            <div class="left-controls">
-                <!-- Selector de proyectos -->
-                <select id="selectProyectoProy" disabled>
-                    <option value="">Seleccione proyecto</option>
-                </select>
+    <div class="controls-container">
+        <div class="left-controls">
 
-                <!-- Selector de años -->
-                <select id="yearSelectProy" disabled>
-                    <option value="">Año</option>
-                </select>
-            </div>
-            
-            <div class="right-controls">
-                <span class="date-label">Inicio:</span>
-                <input type="date" id="fechaInicioProy" readonly>
-                
-                <span class="date-label">Fin:</span>
-                <input type="date" id="fechaFinProy" readonly>
-            </div>
+            <!-- Selector de compañía para el proyectado -->
+            <select id="selectCiaProy">
+                <option value="">Seleccione compañía</option>
+            </select>
+
+            <!-- Selector de proyectos (se llena con el botón de abajo) -->
+            <select id="selectProyectoProy" disabled>
+                <option value="">Seleccione proyecto</option>
+            </select>
+
+            <!-- Selector de años -->
+            <select id="yearSelectProy" disabled>
+                <option value="">Año</option>
+            </select>
         </div>
+        
+        <div class="right-controls">
+            <span class="date-label">Inicio:</span>
+            <input type="date" id="fechaInicioProy" readonly>
+            
+            <span class="date-label">Fin:</span>
+            <input type="date" id="fechaFinProy" readonly>
+        </div>
+    </div>
 
+            
         <!-- Hidden PK -->
         <input type="hidden" id="codCiaProyHidden">
         <input type="hidden" id="codPytoProyHidden">

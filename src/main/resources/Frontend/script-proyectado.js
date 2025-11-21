@@ -21,7 +21,42 @@ const statusMsgProyEl    = document.getElementById("statusMsgProy");
 function setStatusProy(msg) {
   if (statusMsgProyEl) statusMsgProyEl.textContent = msg || "";
 }
+// ================== CARGA DE COMPAÑÍAS (PROYECTADO) ==================
+async function cargarCiasProy() {
+  const selectCia = document.getElementById("selectCiaProy");
+  if (!selectCia) return;
 
+  try {
+    selectCia.disabled = true;
+    selectCia.innerHTML = '<option value="">Seleccione compañía</option>';
+
+    const res = await fetch(`${API_BASE}/cias`, { mode: "cors" });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`Error al obtener compañías: ${res.status} ${txt}`);
+    }
+
+    const cias = await res.json();
+
+    cias.forEach(c => {
+      const opt = document.createElement("option");
+      const cod = c.codCia ?? c.CODCIA ?? c.codcia;
+      const desc =
+        c.desCorta ?? c.DesCorta ?? c.descorta ??
+        c.descia ?? c.DesCia ?? `CIA ${cod}`;
+
+      opt.value = String(cod);
+      opt.textContent = desc;
+      selectCia.appendChild(opt);
+    });
+
+    selectCia.disabled = false;
+  } catch (err) {
+    console.error(err);
+    alert("No se pudieron cargar las compañías (Proyectado): " + err.message);
+    selectCia.disabled = true;
+  }
+}
 // === Helpers para leer versión y mapear árbol ===
 // === Helpers para leer versión y mapear árbol ===
 function getVersionActualProy() {
@@ -216,11 +251,15 @@ function limpiarValoresTablaProy() {
 // CARGA DE PROYECTOS
 // =========================
 
-async function cargarProyectosProy() {
+async function cargarProyectosProy(codCia) {
   const select = document.getElementById("selectProyectoProy");
   if (!select) return;
 
-  const res = await fetch(PROJECTS_BASE, { mode: "cors" });
+  if (!codCia) {
+    throw new Error("Debe seleccionar una compañía.");
+  }
+
+  const res = await fetch(`${PROJECTS_BASE}?codCia=${codCia}`, { mode: "cors" });
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
     throw new Error(`Error al obtener proyectos: ${res.status} ${txt}`);
@@ -240,6 +279,7 @@ async function cargarProyectosProy() {
 
   select.disabled = false;
 }
+
 
 // =========================
 // CARGA DE CONCEPTOS
@@ -946,8 +986,9 @@ function onBlurCeldaProy(ev) {
 
 
 function setupEventListenersProy() {
-  const selectProyecto = document.getElementById("selectProyectoProy");
-  if (!selectProyecto) return; // no estamos en la pantalla proyectada
+  const selectCiaProy   = document.getElementById("selectCiaProy");
+  const selectProyecto  = document.getElementById("selectProyectoProy");
+  if (!selectProyecto || !selectCiaProy) return; // no estamos en pantalla proyectada
 
   const btnProyectos        = document.getElementById("btnProyectosProy");
   const yearSelect          = document.getElementById("yearSelectProy");
@@ -957,6 +998,35 @@ function setupEventListenersProy() {
   const btnValoresProy      = document.getElementById("btnValoresProy");
   const btnGuardarProy      = document.getElementById("btnGuardarProy");
   const btnGuardarTodosProy = document.getElementById("btnGuardarTodosProy");
+
+  // al inicio, no se puede elegir proyecto sin compañía
+  selectProyecto.disabled = true;
+  // ===============================
+  // CAMBIO DE COMPAÑÍA
+  // ===============================
+  selectCiaProy.addEventListener("change", (e) => {
+    const codCia = parseInt(e.target.value, 10) || 0;
+
+    // reset de proyectos y tabla
+    selectProyecto.innerHTML = '<option value="">Seleccione proyecto</option>';
+    selectProyecto.disabled = !codCia;
+
+    resetTablaProy(true);
+    cacheValoresProyPorAnno = {};
+
+    if (codCiaProyHidden)  codCiaProyHidden.value  = codCia ? String(codCia) : "";
+    if (codPytoProyHidden) codPytoProyHidden.value = "";
+    if (proyectoInfoProyEl) proyectoInfoProyEl.textContent = "";
+
+    if (btnProyectos) btnProyectos.classList.add("btn-off");
+
+    setStatusProy(
+      codCia
+        ? "Presione 'Proyectos' para cargar los proyectos de la compañía seleccionada."
+        : "Seleccione una compañía."
+    );
+  });
+
 
   // ===============================
   // BOTÓN PROYECTOS
@@ -971,13 +1041,21 @@ function setupEventListenersProy() {
       const oldText = btn.textContent;
       btn.textContent = "Cargando...";
 
-      try {
-        await cargarProyectosProy();
+           try {
+        const codCia = parseInt(selectCiaProy.value, 10) || 0;
+        if (!codCia) {
+          alert("Seleccione primero una compañía.");
+          btn.textContent = oldText;
+          return;
+        }
+
+        await cargarProyectosProy(codCia);
         btn.classList.remove("btn-off");
         btn.textContent = "Proyectos";
         setStatusProy("Proyectos cargados. Seleccione uno.");
         selectProyecto.focus();
       } catch (err) {
+
         console.error(err);
         alert("No se pudieron cargar los proyectos: " + err.message);
         btn.textContent = oldText;
@@ -1003,11 +1081,18 @@ function setupEventListenersProy() {
     edicionProyActiva = false;
     cacheValoresProyPorAnno = {};  // 🆕 limpiamos todo el cache al cambiar proyecto
 
-    const optSel  = e.target.options[e.target.selectedIndex];
-    const codPyto = parseInt(value, 10);
-    const codCia  = 1;
-    const annoIni = parseInt(optSel.dataset.annoIni, 10);
-    const annoFin = parseInt(optSel.dataset.annoFin, 10);
+    const optSel       = e.target.options[e.target.selectedIndex];
+    const codPyto      = parseInt(value, 10);
+    const codCia       = parseInt(selectCiaProy.value, 10) || 0;
+    const annoIni      = parseInt(optSel.dataset.annoIni, 10);
+    const annoFin      = parseInt(optSel.dataset.annoFin, 10);
+
+    if (!codCia) {
+      alert("Seleccione una compañía antes de elegir proyecto.");
+      resetTablaProy(true);
+      return;
+    }
+
 
     proyectoSeleccionadoProy = { codCia, codPyto, annoIni, annoFin };
 
@@ -1312,8 +1397,7 @@ async function guardarTodosLosAniosProy() {
 // =========================
 // INIT SOLO EN PANTALLA PROYECTADA
 // =========================
-
-function initProyectadoFlow() {
+async function initProyectadoFlow() {
   const tieneTablaProy =
     document.getElementById("headerRowProy") &&
     document.getElementById("bodyRowsProy");
@@ -1322,7 +1406,9 @@ function initProyectadoFlow() {
 
   crearHeaderTablaProy();
   agregarFilasBaseProy();
+  await cargarCiasProy();    // 👈 carga compañías
   setupEventListenersProy();
 }
 
 document.addEventListener("DOMContentLoaded", initProyectadoFlow);
+
