@@ -1,26 +1,23 @@
 package com.dsi.spring.flujoreal.spring_cashflow.service;
 
 import java.math.BigDecimal;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
-import com.dsi.spring.flujoreal.spring_cashflow.config.DBConnection;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.EgresoRealDAO;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.FlujoCajaDetDAO;
+import com.dsi.spring.flujoreal.spring_cashflow.dao.FlujoRealDAO;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.IngresoRealDAO;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.impl.EgresoRealDAOImpl;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.impl.FlujoCajaDetDAOImpl;
+import com.dsi.spring.flujoreal.spring_cashflow.dao.impl.FlujoRealDAOImpl;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.impl.IngresoRealDAOImpl;
+import com.dsi.spring.flujoreal.spring_cashflow.dto.DetValoresDTO;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.FilaFlujoDTO;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.FlujoCajaDetSaveDTO;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.MonthValues;
@@ -31,24 +28,23 @@ import com.dsi.spring.flujoreal.spring_cashflow.utils.PartidaHierarchyResolver;
 public class FlujoRealService {
 
     private final FlujoCajaDetDAO flujoCajaDetDAO = new FlujoCajaDetDAOImpl();
-    private final IngresoRealDAO ingresoRealDAO = new IngresoRealDAOImpl();
-    private final EgresoRealDAO egresoRealDAO   = new EgresoRealDAOImpl();
+    private final IngresoRealDAO ingresoRealDAO   = new IngresoRealDAOImpl();
+    private final EgresoRealDAO  egresoRealDAO    = new EgresoRealDAOImpl();
+    private final FlujoRealDAO   flujoRealDAO     = new FlujoRealDAOImpl();
 
-    // ============================================================
-    // 1. Obtener valores REALES desde FLUJOCAJA_DET
-    // ============================================================
+    // 1) Obtener valores REALES desde FLUJOCAJA_DET
     public List<FilaFlujoDTO> obtener(int codCia, int codPyto, int anno) throws Exception {
 
-        List<FilaFlujoDTO> filasProy = conceptosProyecto(codCia, codPyto);
+        List<FilaFlujoDTO> filasProy = flujoRealDAO.conceptosProyecto(codCia, codPyto);
         Map<Integer, FilaFlujoDTO> indexPorPartida = filasProy.stream()
                 .collect(Collectors.toMap(f -> f.codPartida, f -> f, (a, b) -> a));
 
-        Map<Integer, DetValores> detalle = leerDetalleReal(codCia, codPyto, anno);
+        Map<Integer, DetValoresDTO> detalle = flujoRealDAO.leerDetalleReal(codCia, codPyto, anno);
 
-        for (Map.Entry<Integer, DetValores> e : detalle.entrySet()) {
+        for (Map.Entry<Integer, DetValoresDTO> e : detalle.entrySet()) {
             int codPartida = e.getKey();
             if (!indexPorPartida.containsKey(codPartida)) {
-                FilaFlujoDTO info = obtenerInfoPartida(codCia, codPartida);
+                FilaFlujoDTO info = flujoRealDAO.obtenerInfoPartida(codCia, codPartida);
                 if (info == null) continue;
                 info.noProyectado = true;
                 info.valores = new MonthValues();
@@ -64,7 +60,7 @@ public class FlujoRealService {
         for (FilaFlujoDTO fila : filasProy) {
             if (fila.valores == null) fila.valores = new MonthValues();
 
-            DetValores det = detalle.get(fila.codPartida);
+            DetValoresDTO det = detalle.get(fila.codPartida);
 
             if (det != null) {
                 fila.valores.acumAnt = det.impRealIni;
@@ -104,7 +100,7 @@ public class FlujoRealService {
         FilaFlujoDTO neto = new FilaFlujoDTO();
         neto.codPartida = 0;
         neto.desPartida = "FLUJO DE CAJA NETO";
-        neto.ingEgr = "N";
+        neto.ingEgr     = "N";
         neto.codPartidas = "ZZZ";
         neto.nivel = 1;
         neto.valores = new MonthValues();
@@ -125,150 +121,13 @@ public class FlujoRealService {
         return salida;
     }
 
-    // ============================================================
-    // 2. Leer detalle real desde FLUJOCAJA_DET
-    // ============================================================
-    private Map<Integer, DetValores> leerDetalleReal(int codCia, int codPyto, int anno) throws Exception {
-
-        String sql = """
-            SELECT d.CodPartida, d.ImpRealIni,
-                   d.ImpRealEne, d.ImpRealFeb, d.ImpRealMar, d.ImpRealAbr,
-                   d.ImpRealMay, d.ImpRealJun, d.ImpRealJul, d.ImpRealAgo,
-                   d.ImpRealSep, d.ImpRealOct, d.ImpRealNov, d.ImpRealDic,
-                   d.ImpRealAcum
-            FROM FLUJOCAJA_DET d
-            WHERE d.Anno = ? AND d.CodCia = ? AND d.CodPyto = ?
-            """;
-
-        Map<Integer, DetValores> out = new HashMap<>();
-
-        try (Connection cn = DBConnection.getInstance().getConnection();
-             PreparedStatement ps = cn.prepareStatement(sql)) {
-
-            ps.setInt(1, anno);
-            ps.setInt(2, codCia);
-            ps.setInt(3, codPyto);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    int codPartida = rs.getInt("CodPartida");
-
-                    DetValores det = new DetValores();
-                    det.impRealIni  = nvl(rs, "ImpRealIni");
-                    det.impRealAcum = nvl(rs, "ImpRealAcum");
-
-                    det.mes[0]  = nvl(rs, "ImpRealEne");
-                    det.mes[1]  = nvl(rs, "ImpRealFeb");
-                    det.mes[2]  = nvl(rs, "ImpRealMar");
-                    det.mes[3]  = nvl(rs, "ImpRealAbr");
-                    det.mes[4]  = nvl(rs, "ImpRealMay");
-                    det.mes[5]  = nvl(rs, "ImpRealJun");
-                    det.mes[6]  = nvl(rs, "ImpRealJul");
-                    det.mes[7]  = nvl(rs, "ImpRealAgo");
-                    det.mes[8]  = nvl(rs, "ImpRealSep");
-                    det.mes[9]  = nvl(rs, "ImpRealOct");
-                    det.mes[10] = nvl(rs, "ImpRealNov");
-                    det.mes[11] = nvl(rs, "ImpRealDic");
-
-                    out.put(codPartida, det);
-                }
-            }
-        }
-
-        return out;
-    }
-
-    private BigDecimal nvl(ResultSet rs, String col) throws SQLException {
-        BigDecimal b = rs.getBigDecimal(col);
-        return (b != null) ? b : BigDecimal.ZERO;
-    }
-
-    // ============================================================
-    // 3. Obtener estructura de conceptos del proyecto
-    // ============================================================
-    private List<FilaFlujoDTO> conceptosProyecto(int codCia, int codPyto) throws Exception {
-
-        String sql = """
-            SELECT pp.IngEgr, pp.CodPartida, pa.DesPartida,
-                   pp.Nivel, pp.CodPartidas
-            FROM PROY_PARTIDA pp
-            JOIN PARTIDA pa
-              ON pa.CodCia = pp.CodCia
-             AND pa.IngEgr = pp.IngEgr
-             AND pa.CodPartida = pp.CodPartida
-            WHERE pp.CodCia = ? AND pp.CodPyto = ?
-            ORDER BY pp.IngEgr, pp.CodPartidas
-            """;
-
-        List<FilaFlujoDTO> out = new ArrayList<>();
-
-        try (Connection cn = DBConnection.getInstance().getConnection();
-             PreparedStatement ps = cn.prepareStatement(sql)) {
-
-            ps.setInt(1, codCia);
-            ps.setInt(2, codPyto);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    FilaFlujoDTO f = new FilaFlujoDTO();
-                    f.ingEgr      = rs.getString("IngEgr");
-                    f.codPartida  = rs.getInt("CodPartida");
-                    f.desPartida  = rs.getString("DesPartida");
-                    f.nivel       = rs.getInt("Nivel");
-                    f.codPartidas = rs.getString("CodPartidas");
-                    f.valores     = new MonthValues();
-                    out.add(f);
-                }
-            }
-        }
-
-        return out;
-    }
-
-    // ============================================================
-    // 4. Obtener info de una PARTIDA
-    // ============================================================
-    private FilaFlujoDTO obtenerInfoPartida(int codCia, int codPartida) throws Exception {
-
-        String sql = """
-            SELECT IngEgr, CodPartida, DesPartida, Nivel, CodPartidas
-            FROM PARTIDA
-            WHERE CodCia = ? AND CodPartida = ?
-            """;
-
-        try (Connection cn = DBConnection.getInstance().getConnection();
-             PreparedStatement ps = cn.prepareStatement(sql)) {
-
-            ps.setInt(1, codCia);
-            ps.setInt(2, codPartida);
-
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    FilaFlujoDTO f = new FilaFlujoDTO();
-                    f.ingEgr      = rs.getString("IngEgr");
-                    f.codPartida  = rs.getInt("CodPartida");
-                    f.desPartida  = rs.getString("DesPartida");
-                    f.nivel       = rs.getInt("Nivel");
-                    f.codPartidas = rs.getString("CodPartidas");
-                    return f;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    // ============================================================
-    // 5. Guardar valores reales
-    // ============================================================
+    // 5) Guardar valores reales
     public void guardar(List<FlujoCajaDetSaveDTO> filas) throws Exception {
         if (filas == null || filas.isEmpty()) return;
         flujoCajaDetDAO.saveOrUpdateBatch(filas);
     }
 
-    // ============================================================
-    // 6. OBTENER VALORES REALES DE UN MES
-    // ============================================================
+    // 6) Obtener valores reales de un MES (desde boletas)
     public List<RealMesDTO> obtenerMesDesdeBoletas(
             int codCia,
             int codPyto,
@@ -288,7 +147,7 @@ public class FlujoRealService {
 
         java.util.function.Function<Integer, RealMesDTO> construirDTO = (codPartida) -> {
             try {
-                FilaFlujoDTO info = obtenerInfoPartida(codCia, codPartida);
+                FilaFlujoDTO info = flujoRealDAO.obtenerInfoPartida(codCia, codPartida);
                 if (info == null) return null;
 
                 var parentCodes = PartidaHierarchyResolver.deriveParent(
@@ -299,13 +158,13 @@ public class FlujoRealService {
                 Integer padre = parentCodes.codPartidaPadreNum.orElse(null);
 
                 RealMesDTO dto = new RealMesDTO();
-                dto.codPartida  = info.codPartida;
-                dto.ingEgr      = info.ingEgr;
-                dto.desPartida  = info.desPartida;
-                dto.nivel       = info.nivel;
-                dto.codPartidas = info.codPartidas;
+                dto.codPartida    = info.codPartida;
+                dto.ingEgr        = info.ingEgr;
+                dto.desPartida    = info.desPartida;
+                dto.nivel         = info.nivel;
+                dto.codPartidas   = info.codPartidas;
                 dto.parentPartida = padre;
-                dto.mes = mes;
+                dto.mes           = mes;
 
                 return dto;
 
@@ -349,33 +208,30 @@ public class FlujoRealService {
                     RealMesDTO dto = construirDTO.apply(codPartida);
                     if (dto != null) {
                         dto.ingEgr = "E";
-                        dto.monto = val;
+                        dto.monto  = val;
                         resultado.add(dto);
                     }
                 }
             }
         }
 
-        // ============================================================
-        // 🔥 NUEVO: AGREGAR TODAS LAS PARTIDAS QUE NO VINIERON
-        // ============================================================
-
-        List<FilaFlujoDTO> estructura = conceptosProyecto(codCia, codPyto);
+        // Agregar partidas que no vinieron (en cero)
+        List<FilaFlujoDTO> estructura = flujoRealDAO.conceptosProyecto(codCia, codPyto);
 
         for (FilaFlujoDTO p : estructura) {
 
             boolean existe = resultado.stream()
-                .anyMatch(r -> r.codPartida == p.codPartida);
+                    .anyMatch(r -> r.codPartida == p.codPartida);
 
             if (!existe) {
                 RealMesDTO dto = new RealMesDTO();
-                dto.codPartida = p.codPartida;
-                dto.ingEgr = p.ingEgr;
-                dto.desPartida = p.desPartida;
-                dto.nivel = p.nivel;
+                dto.codPartida  = p.codPartida;
+                dto.ingEgr      = p.ingEgr;
+                dto.desPartida  = p.desPartida;
+                dto.nivel       = p.nivel;
                 dto.codPartidas = p.codPartidas;
-                dto.mes = mes;
-                dto.monto = BigDecimal.ZERO;
+                dto.mes         = mes;
+                dto.monto       = BigDecimal.ZERO;
 
                 var parentCodes = PartidaHierarchyResolver.deriveParent(
                         p.codPartidas,
@@ -388,19 +244,5 @@ public class FlujoRealService {
         }
 
         return resultado;
-    }
-
-
-    // ============================================================
-    // Clase interna para FLUJOCAJA_DET
-    // ============================================================
-    private static class DetValores {
-        BigDecimal impRealIni  = BigDecimal.ZERO;
-        BigDecimal impRealAcum = BigDecimal.ZERO;
-        BigDecimal[] mes       = new BigDecimal[12];
-
-        DetValores() {
-            Arrays.fill(mes, BigDecimal.ZERO);
-        }
     }
 }
