@@ -42,4 +42,46 @@ public class ProyectoDAOImpl implements ProyectoDAO {
             throw new Exception("Error listarProyectos()", e);
         }
     }
+    @Override
+    
+public List<ProyectoDetalleDTO> listarProyectosPorCia(int codCia) throws Exception {
+
+    String sql = """
+        SELECT CodCia, CodPyto, NombPyto, AnnoIni, AnnoFin
+        FROM PROYECTO
+        WHERE Vigente = 'S'
+          AND CodCia = ?
+        ORDER BY NombPyto
+    """;
+
+    List<ProyectoDetalleDTO> out = new ArrayList<>();
+
+    try (Connection cn = DBConnection.getInstance().getConnection();
+         PreparedStatement ps = cn.prepareStatement(sql)) {
+
+        ps.setInt(1, codCia);
+
+        try (ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                ProyectoDetalleDTO p = new ProyectoDetalleDTO();
+
+                // 🔥 IMPORTANTE: ahora sí seteamos CodCia
+                p.setCodCia(rs.getInt("CodCia"));
+
+                p.setCodPyto(rs.getInt("CodPyto"));
+                p.setNombPyto(rs.getString("NombPyto"));
+                p.setAnnoIni(rs.getInt("AnnoIni"));
+                p.setAnnoFin(rs.getInt("AnnoFin"));
+
+                out.add(p);
+            }
+        }
+
+        return out;
+
+    } catch (SQLException e) {
+        throw new Exception("Error listarProyectosPorCia()", e);
+    }
+}
+
 }

@@ -1,9 +1,12 @@
 package com.dsi.spring.flujoreal.spring_cashflow.factory;
 
+import com.dsi.spring.flujoreal.spring_cashflow.dao.CiaDAO;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.PartidaDAO;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.ProyectoDAO;
+import com.dsi.spring.flujoreal.spring_cashflow.dao.impl.CiaDAOImpl;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.impl.PartidaDAOImpl;
 import com.dsi.spring.flujoreal.spring_cashflow.dao.impl.ProyectoDAOImpl;
+
 
 /**
  * Fábrica Abstracta con soporte para creación directa (Factory Method)
@@ -38,8 +41,14 @@ public abstract class DAOFactory {
     public static ProyectoDAO createProyectoDAO() {
         return new ProyectoDAOImpl();
     }
+    public static CiaDAO createCiaDAO() {
+    return new CiaDAOImpl();
+    }
+
+    public abstract CiaDAO getCiaDAO();
 
     // --- Métodos abstractos (modo extensible con subfábricas) ---
     public abstract ProyectoDAO getProyectoDAO();
     public abstract PartidaDAO getPartidaDAO();
+    
 }

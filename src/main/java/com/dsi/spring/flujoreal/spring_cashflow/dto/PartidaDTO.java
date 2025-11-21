@@ -13,6 +13,7 @@ public class PartidaDTO {
     private int nivel;
     private Integer semilla;      // vínculo único (boletas)
     private Integer orden;        // puede ser null
+    private boolean noProyectado;
 
     // --- Getters y Setters ---
     public String getIngEgr() { return ingEgr; }
@@ -35,4 +36,7 @@ public class PartidaDTO {
 
     public Integer getOrden() { return orden; }
     public void setOrden(Integer orden) { this.orden = orden; }
+
+    public boolean isNoProyectado() { return noProyectado; }
+    public void setNoProyectado(boolean noProyectado) { this.noProyectado = noProyectado; }
 }

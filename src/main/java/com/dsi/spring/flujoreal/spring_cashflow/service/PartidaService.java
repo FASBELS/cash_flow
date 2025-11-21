@@ -8,11 +8,11 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import com.dsi.spring.flujoreal.spring_cashflow.dao.PartidaDAO;
+import com.dsi.spring.flujoreal.spring_cashflow.dao.impl.PartidaDAOImpl;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.PartidaDTO;
 import com.dsi.spring.flujoreal.spring_cashflow.factory.DAOFactory;
 import com.dsi.spring.flujoreal.spring_cashflow.tree.ArbolProyecto;
-import com.dsi.spring.flujoreal.spring_cashflow.tree.NodoNivel1;
-import com.dsi.spring.flujoreal.spring_cashflow.tree.NodoNivel2;
+import com.dsi.spring.flujoreal.spring_cashflow.tree.NodoPartidaArbol;
 import com.dsi.spring.flujoreal.spring_cashflow.utils.PartidaHierarchyResolver;
 
 public class PartidaService {
@@ -20,73 +20,134 @@ public class PartidaService {
     private final DAOFactory factory = DAOFactory.getDAOFactory(DAOFactory.ORACLE);
     private final PartidaDAO dao = factory.getPartidaDAO();
 
-    // Comparator común para respetar el ORDEN del proyecto
+    // Comparator para respetar el ORDEN del proyecto
     private static final Comparator<PartidaDTO> ORDEN_COMPARATOR =
-        Comparator
-            // primero por orden (nulls al final)
-            .comparing(
-                (PartidaDTO p) -> p.getOrden(),
-                Comparator.nullsLast(Integer::compareTo)
-            )
-            // y si hubiera empate, por codPartida
-            .thenComparing(PartidaDTO::getCodPartida);
+            Comparator.comparing(
+                    (PartidaDTO p) -> p.getOrden(),
+                    Comparator.nullsLast(Integer::compareTo)
+            ).thenComparing(PartidaDTO::getCodPartida);
 
+    /**
+     * Obtiene la lista de partidas:
+     * - Partidas presupuestadas del proyecto
+     * - Partidas reales desde comprobantes (si no están presupuestadas)
+     */
     public List<PartidaDTO> conceptosDeProyecto(int codCia, int codPyto, int nroVersion) {
-        return dao.listarPorProyecto(codCia, codPyto, nroVersion);
+
+        // 1) Partidas del proyecto (presupuestadas)
+        List<PartidaDTO> proyectadas = dao.listarPorProyecto(codCia, codPyto, nroVersion);
+
+        // Índice para saber si una partida ya estaba presupuestada
+        Map<Integer, PartidaDTO> idx = proyectadas.stream()
+                .collect(Collectors.toMap(PartidaDTO::getCodPartida, p -> p));
+
+        // 2) Partidas reales
+        List<PartidaDTO> desdeComprobantes =
+                ((PartidaDAOImpl) dao).listarPartidasDesdeComprobantes(codCia, codPyto);
+
+        // 3) Filtrar las no proyectadas
+        List<PartidaDTO> noProyectadas = desdeComprobantes.stream()
+                .filter(p -> !idx.containsKey(p.getCodPartida()))
+                .collect(Collectors.toList());
+
+        // 4) Combinar ambas
+        List<PartidaDTO> finalList = new ArrayList<>();
+        finalList.addAll(proyectadas);
+        finalList.addAll(noProyectadas);
+
+        return finalList;
     }
 
-    public ArbolProyecto buildArbolProyecto(int codCia, int codPyto, int nroVersion) {
-        // 1️⃣ Obtener todas las partidas (niveles 1 y 2) del proyecto
-        List<PartidaDTO> partidas = dao.listarPorProyecto(codCia, codPyto, nroVersion);
-        ArbolProyecto arbol = new ArbolProyecto();
+    /**
+     * Construye un árbol multi-nivel usando NodoPartidaArbol
+     * Soporta niveles 1,2,3,4,5... infinitos
+     */
+public ArbolProyecto buildArbolProyecto(int codCia, int codPyto, int nroVersion) {
 
-        if (partidas == null || partidas.isEmpty()) return arbol;
+    List<PartidaDTO> partidas = dao.listarPorProyecto(codCia, codPyto, nroVersion);
 
-        // 2️⃣ Índices para buscar los padres por código
-        Map<String, NodoNivel1> idxNivel1Str = new LinkedHashMap<>();
-        Map<Integer, NodoNivel1> idxNivel1Num = new LinkedHashMap<>();
+    ArbolProyecto arbol = new ArbolProyecto();
+    if (partidas == null || partidas.isEmpty()) return arbol;
 
-        // 3️⃣ Crear nodos de nivel 1 (ingresos/egresos)
-        for (PartidaDTO p : partidas.stream()
-                .filter(x -> x.getNivel() == 1)
-                .sorted(ORDEN_COMPARATOR)  // 👈 ahora respeta ppm.Orden
-                .collect(Collectors.toList())) {
+    // Ordenar por orden mezcla
+    partidas = partidas.stream()
+            .sorted(ORDEN_COMPARATOR)
+            .collect(Collectors.toList());
 
-            NodoNivel1 n1 = new NodoNivel1(p);
-            if (p.getCodPartidas() != null) idxNivel1Str.put(p.getCodPartidas(), n1);
-            if (p.getCodPartida() != null)  idxNivel1Num.put(p.getCodPartida(),  n1);
+    // Índice numérico
+    Map<Integer, NodoPartidaArbol> idx = new LinkedHashMap<>();
 
-            arbol.getPorIngEgr()
-                 .computeIfAbsent(p.getIngEgr(), k -> new ArrayList<>())
-                 .add(n1);
+    // Índice textual (codPartidas: "ING-001-01", etc.)
+    Map<String, NodoPartidaArbol> idxPorCodPartidas = new LinkedHashMap<>();
+
+    // --- 1) Crear nodos sueltos
+    for (PartidaDTO p : partidas) {
+        NodoPartidaArbol nodo = new NodoPartidaArbol(p);
+        nodo.setNoProyectado(p.isNoProyectado());
+
+        idx.put(p.getCodPartida(), nodo);
+
+        if (p.getCodPartidas() != null && !p.getCodPartidas().isBlank()) {
+            idxPorCodPartidas.put(p.getCodPartidas(), nodo);
         }
-
-        // 4️⃣ Vincular los nodos de nivel 2 con su nivel 1
-        for (PartidaDTO p : partidas.stream()
-                .filter(x -> x.getNivel() == 2)
-                .sorted(ORDEN_COMPARATOR)  // 👈 idem, orden de hijos según mezcla
-                .collect(Collectors.toList())) {
-
-            var parentCodes = PartidaHierarchyResolver.deriveParent(p.getCodPartidas(), p.getCodPartida());
-            NodoNivel1 padre = null;
-
-            if (parentCodes.codPartidasPadreStr.isPresent()) {
-                padre = idxNivel1Str.get(parentCodes.codPartidasPadreStr.get());
-            } else if (parentCodes.codPartidaPadreNum.isPresent()) {
-                padre = idxNivel1Num.get(parentCodes.codPartidaPadreNum.get());
-            }
-
-            if (padre != null) {
-                padre.getHijos().add(new NodoNivel2(p));
-            } else {
-                // Si no encontramos padre, lo tratamos como nivel 1 suelto
-                NodoNivel1 suelto = new NodoNivel1(p);
-                arbol.getPorIngEgr()
-                     .computeIfAbsent(p.getIngEgr(), k -> new ArrayList<>())
-                     .add(suelto);
-            }
-        }
-
-        return arbol;
     }
+
+    // --- 2) Enlazar jerarquía padre-hijo usando numérico o textual
+    for (PartidaDTO p : partidas) {
+
+        NodoPartidaArbol nodo = idx.get(p.getCodPartida());
+
+        var parentCodes = PartidaHierarchyResolver.deriveParent(
+                p.getCodPartidas(),
+                p.getCodPartida()
+        );
+
+        NodoPartidaArbol padre = null;
+
+        // a) Intentar por parentNum (padre numérico)
+        if (parentCodes.codPartidaPadreNum.isPresent()) {
+            padre = idx.get(parentCodes.codPartidaPadreNum.get());
+        }
+
+        // b) Si no tiene padre numérico, usar codPartidasPadreStr
+        if (padre == null && parentCodes.codPartidasPadreStr.isPresent()) {
+            padre = idxPorCodPartidas.get(parentCodes.codPartidasPadreStr.get());
+        }
+
+        // Enlazar si lo encontramos
+        if (padre != null) padre.getHijos().add(nodo);
+    }
+
+    // --- 3) Raíces: las partidas que NO tienen padre (ni numérico ni textual)
+// 3️⃣ Extraer raíces (nivel 1) y agregarlas al árbol por Ing/Egr
+for (PartidaDTO p : partidas) {
+    var parentCodes = PartidaHierarchyResolver.deriveParent(
+            p.getCodPartidas(),
+            p.getCodPartida()
+    );
+
+    NodoPartidaArbol posiblePadre = null;
+
+    // Intentar encontrar padre numérico
+    if (parentCodes.codPartidaPadreNum.isPresent()) {
+        posiblePadre = idx.get(parentCodes.codPartidaPadreNum.get());
+    }
+
+    // Si no hay padre numérico, intentamos por texto (codPartidas)
+    if (posiblePadre == null && parentCodes.codPartidasPadreStr.isPresent()) {
+        posiblePadre = idxPorCodPartidas.get(parentCodes.codPartidasPadreStr.get());
+    }
+
+    // Si NO encontramos padre en ninguno de los dos índices, es raíz
+    if (posiblePadre == null) {
+        arbol.getPorIngEgr()
+                .computeIfAbsent(p.getIngEgr(), k -> new ArrayList<>())
+                .add(idx.get(p.getCodPartida()));
+    }
+}
+
+
+    return arbol;
+}
+
 }

@@ -17,6 +17,10 @@
 
         <div class="controls-container">
             <div class="left-controls">
+             <!-- 🆕 Selector de compañía -->
+                <select id="selectCia">
+                    <option value="">Seleccione compañía</option>
+                </select>
                 <!-- Selector de proyectos -->
                 <select id="selectProyecto" disabled>
                     <option value="">Seleccione proyecto</option>
@@ -88,13 +92,21 @@
             </table>
         </div>
 
-        <div class="buttons-container">
-            <button class="concepto-btn btn-off" id="btnProyectos">Proyectos</button>
-            <button class="concepto-btn" id="btnConcepto">Concepto</button>
-            <button class="concepto-btn" id="btnValores">Valores</button>
-            <button class="concepto-btn" id="btnGuardarTodos" type="button">Guardar todos</button>
-            <button class="concepto-btn" id="btnInicio" type="button">Inicio</button>
-        </div>
+    <div class="buttons-container">
+        <button class="concepto-btn btn-off" id="btnProyectos">Proyectos</button>
+        <button class="concepto-btn" id="btnConcepto">Concepto</button>
+        <button class="concepto-btn" id="btnValores">Cargar flujo de caja</button>
+        <!-- 🆕 BOTÓN PARA UN SOLO MES -->
+        <button class="concepto-btn" id="btnCargarMes" type="button">Cargar mes</button>
+        <!-- 🆕 BOTÓN REFACTORIZAR MES -->
+        <button class="concepto-btn" id="btnRefactorizar" type="button">Refactorizar mes</button>
+        <!-- 🆕 BOTÓN GUARDAR SOLO EL AÑO VISIBLE -->
+        <button class="concepto-btn" id="btnGuardar" type="button">Guardar</button>
+        <!-- Ya existente: guarda todos los años -->
+        <button class="concepto-btn" id="btnInicio" type="button">Inicio</button>
+    </div>
+
+
     </div>
     <footer>© 2025 Flujo de caja — DSI - GRUPO 5</footer>
     <script src="script.js"></script>

@@ -20,11 +20,9 @@ public class FlujoCajaDetDAOImpl implements FlujoCajaDetDAO {  // 👈 IMPORTANT
 public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
     if (f == null) return;
 
-    // Para el flujo REAL queremos que comparta la misma fila que el proyectado,
-    // por eso forzamos Tipo = 'M' (igual que saveOrUpdateProyectado).
-    String tipo = "M";
+    String tipo = "M"; // Tipo único para real/proyectado en misma fila
 
-    // Aseguramos array de 12 posiciones (ene..dic)
+    // Garantizar array de meses
     BigDecimal[] m = (f.impRealMes != null && f.impRealMes.length >= 12)
             ? f.impRealMes
             : new BigDecimal[12];
@@ -42,16 +40,15 @@ public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
     BigDecimal nov = nz(m[10]);
     BigDecimal dic = nz(m[11]);
 
-    // Suma sólo del año actual (los 12 meses reales)
-    BigDecimal sumaAnual = ene
-            .add(feb).add(mar).add(abr).add(may).add(jun)
+    // Suma del año actual
+    BigDecimal sumaAnual = ene.add(feb).add(mar).add(abr).add(may).add(jun)
             .add(jul).add(ago).add(sep).add(oct).add(nov).add(dic);
 
     try (Connection cn = DBConnection.getInstance().getConnection()) {
 
-        // -----------------------------------------------------------------
-        // 1) Calcular ImpRealIni = ImpRealAcum del año anterior (Y-1)
-        // -----------------------------------------------------------------
+        // ==========================================================
+        // 1) Calcular ImpRealIni leyendo ImpRealAcum del año anterior
+        // ==========================================================
         BigDecimal impRealIni = BigDecimal.ZERO;
 
         String sqlIni = """
@@ -65,30 +62,28 @@ public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
                AND CodPartida = ?
         """;
 
-        try (PreparedStatement psIni = cn.prepareStatement(sqlIni)) {
-            psIni.setInt(1, f.anno - 1);   // año anterior
-            psIni.setInt(2, f.codCia);
-            psIni.setInt(3, f.codPyto);
-            psIni.setString(4, f.ingEgr);
-            psIni.setString(5, tipo);
-            psIni.setInt(6, f.codPartida);
+        try (PreparedStatement ps = cn.prepareStatement(sqlIni)) {
+            ps.setInt(1, f.anno - 1);
+            ps.setInt(2, f.codCia);
+            ps.setInt(3, f.codPyto);
+            ps.setString(4, f.ingEgr);
+            ps.setString(5, tipo);
+            ps.setInt(6, f.codPartida);
 
-            try (ResultSet rs = psIni.executeQuery()) {
+            try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     BigDecimal prev = rs.getBigDecimal(1);
-                    if (prev != null) {
-                        impRealIni = prev;
-                    }
+                    if (prev != null) impRealIni = prev;
                 }
             }
         }
 
-        // ImpRealAcum = acumulado anterior + año actual
+        // Acumulado del año actual
         BigDecimal impRealAcum = impRealIni.add(sumaAnual);
 
-        // -----------------------------------------------------------------
-        // 2) Intentar UPDATE en FLUJOCAJA_DET (columnas reales)
-        // -----------------------------------------------------------------
+        // ==========================================================
+        // 2) UPDATE del año actual
+        // ==========================================================
         String upd = """
             UPDATE FLUJOCAJA_DET
                SET ImpRealIni  = ?,
@@ -114,6 +109,7 @@ public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
         """;
 
         int rows;
+
         try (PreparedStatement ps = cn.prepareStatement(upd)) {
             int i = 1;
             ps.setBigDecimal(i++, impRealIni);
@@ -141,19 +137,14 @@ public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
             rows = ps.executeUpdate();
         }
 
-        // -----------------------------------------------------------------
-        // 3) Si no existe detalle, garantizar padre en FLUJOCAJA e INSERT
-        // -----------------------------------------------------------------
+        // ==========================================================
+        // 3) INSERT si no existía
+        // ==========================================================
         if (rows == 0) {
-            // Crea la fila padre en FLUJOCAJA si aún no existe
+
             ensureFlujoCajaRow(
-                    cn,
-                    f.codCia,
-                    f.codPyto,
-                    f.ingEgr,
-                    tipo,
-                    f.codPartida,
-                    f.orden
+                    cn, f.codCia, f.codPyto, f.ingEgr,
+                    tipo, f.codPartida, f.orden
             );
 
             String ins = """
@@ -175,20 +166,20 @@ public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
                     ImpAcum,    ImpRealAcum
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?,
-                    0, ?,      -- ImpIni = 0, ImpRealIni = ?
-                    0, ?,      -- ImpEne / ImpRealEne
-                    0, ?,      -- ImpFeb / ImpRealFeb
-                    0, ?,      -- ImpMar / ImpRealMar
-                    0, ?,      -- ImpAbr / ImpRealAbr
-                    0, ?,      -- ImpMay / ImpRealMay
-                    0, ?,      -- ImpJun / ImpRealJun
-                    0, ?,      -- ImpJul / ImpRealJul
-                    0, ?,      -- ImpAgo / ImpRealAgo
-                    0, ?,      -- ImpSep / ImpRealSep
-                    0, ?,      -- ImpOct / ImpRealOct
-                    0, ?,      -- ImpNov / ImpRealNov
-                    0, ?,      -- ImpDic / ImpRealDic
-                    0, ?       -- ImpAcum = 0, ImpRealAcum = ?
+                    0, ?,     -- ImpIni (proy) siempre 0
+                    0, ?,     -- meses proyectados siempre 0
+                    0, ?, 
+                    0, ?, 
+                    0, ?, 
+                    0, ?, 
+                    0, ?, 
+                    0, ?, 
+                    0, ?, 
+                    0, ?, 
+                    0, ?, 
+                    0, ?, 
+                    0, ?,     -- imp proy dic
+                    0, ?      -- ImpAcum proy =0, real=?
                 )
             """;
 
@@ -220,8 +211,140 @@ public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
                 ps.executeUpdate();
             }
         }
+
+        // ==========================================================
+        // 4) 🔥 NUEVO: Recalcular toda la cadena hacia adelante
+        // ==========================================================
+        recalcCadenaRealForward(
+                cn,
+                f.codCia,
+                f.codPyto,
+                f.ingEgr,
+                tipo,
+                f.codPartida,
+                f.anno
+        );
     }
 }
+
+
+/**
+ * Recalcula ImpRealIni / ImpRealAcum para todos los años
+ * posteriores a annoBase (annoBase+1, annoBase+2, ...)
+ * de una misma partida real.
+ */
+private void recalcCadenaRealForward(
+        Connection cn,
+        int codCia,
+        int codPyto,
+        String ingEgr,
+        String tipo,
+        int codPartida,
+        int annoBase
+) throws Exception {
+
+    String sqlSel = """
+        SELECT Anno,
+               NVL(ImpRealEne,0) AS ImpRealEne,
+               NVL(ImpRealFeb,0) AS ImpRealFeb,
+               NVL(ImpRealMar,0) AS ImpRealMar,
+               NVL(ImpRealAbr,0) AS ImpRealAbr,
+               NVL(ImpRealMay,0) AS ImpRealMay,
+               NVL(ImpRealJun,0) AS ImpRealJun,
+               NVL(ImpRealJul,0) AS ImpRealJul,
+               NVL(ImpRealAgo,0) AS ImpRealAgo,
+               NVL(ImpRealSep,0) AS ImpRealSep,
+               NVL(ImpRealOct,0) AS ImpRealOct,
+               NVL(ImpRealNov,0) AS ImpRealNov,
+               NVL(ImpRealDic,0) AS ImpRealDic,
+               NVL(ImpRealAcum,0) AS ImpRealAcum
+          FROM FLUJOCAJA_DET
+         WHERE CodCia     = ?
+           AND CodPyto    = ?
+           AND IngEgr     = ?
+           AND Tipo       = ?
+           AND CodPartida = ?
+           AND Anno      >= ?
+         ORDER BY Anno
+    """;
+
+    try (PreparedStatement ps = cn.prepareStatement(sqlSel)) {
+        ps.setInt(1, codCia);
+        ps.setInt(2, codPyto);
+        ps.setString(3, ingEgr);
+        ps.setString(4, tipo);
+        ps.setInt(5, codPartida);
+        ps.setInt(6, annoBase);
+
+        try (ResultSet rs = ps.executeQuery()) {
+
+            BigDecimal acumuladoAnterior = null;
+
+            while (rs.next()) {
+                int anno = rs.getInt("Anno");
+
+                BigDecimal ene = nz(rs.getBigDecimal("ImpRealEne"));
+                BigDecimal feb = nz(rs.getBigDecimal("ImpRealFeb"));
+                BigDecimal mar = nz(rs.getBigDecimal("ImpRealMar"));
+                BigDecimal abr = nz(rs.getBigDecimal("ImpRealAbr"));
+                BigDecimal may = nz(rs.getBigDecimal("ImpRealMay"));
+                BigDecimal jun = nz(rs.getBigDecimal("ImpRealJun"));
+                BigDecimal jul = nz(rs.getBigDecimal("ImpRealJul"));
+                BigDecimal ago = nz(rs.getBigDecimal("ImpRealAgo"));
+                BigDecimal sep = nz(rs.getBigDecimal("ImpRealSep"));
+                BigDecimal oct = nz(rs.getBigDecimal("ImpRealOct"));
+                BigDecimal nov = nz(rs.getBigDecimal("ImpRealNov"));
+                BigDecimal dic = nz(rs.getBigDecimal("ImpRealDic"));
+
+                BigDecimal sumaAnual = ene
+                        .add(feb).add(mar).add(abr).add(may).add(jun)
+                        .add(jul).add(ago).add(sep).add(oct).add(nov).add(dic);
+
+                // Primer registro del resultset: es el año base (annoBase)
+                if (acumuladoAnterior == null) {
+                    // Sólo tomamos su ImpRealAcum actual como punto de partida
+                    acumuladoAnterior = nz(rs.getBigDecimal("ImpRealAcum"));
+                    continue; // NO lo tocamos, ya lo actualizó saveOrUpdate
+                }
+
+                // Años siguientes: ImpRealIni = acumulado del año anterior
+                BigDecimal impRealIni = acumuladoAnterior;
+                BigDecimal impRealAcum = impRealIni.add(sumaAnual);
+
+                String upd = """
+                    UPDATE FLUJOCAJA_DET
+                       SET ImpRealIni  = ?,
+                           ImpRealAcum = ?
+                     WHERE Anno       = ?
+                       AND CodCia     = ?
+                       AND CodPyto    = ?
+                       AND IngEgr     = ?
+                       AND Tipo       = ?
+                       AND CodPartida = ?
+                """;
+
+                try (PreparedStatement psUpd = cn.prepareStatement(upd)) {
+                    int i = 1;
+                    psUpd.setBigDecimal(i++, impRealIni);
+                    psUpd.setBigDecimal(i++, impRealAcum);
+                    psUpd.setInt(i++, anno);
+                    psUpd.setInt(i++, codCia);
+                    psUpd.setInt(i++, codPyto);
+                    psUpd.setString(i++, ingEgr);
+                    psUpd.setString(i++, tipo);
+                    psUpd.setInt(i++, codPartida);
+                    psUpd.executeUpdate();
+                }
+
+                // Para el siguiente año
+                acumuladoAnterior = impRealAcum;
+            }
+        }
+    }
+}
+
+
+
 // ============================================================
 //  FLUJO PROYECTADO  (ImpIni / ImpAcum por año)
 // ============================================================

@@ -6,4 +6,7 @@ import com.dsi.spring.flujoreal.spring_cashflow.dto.ProyectoDetalleDTO;
 
 public interface ProyectoDAO {
     List<ProyectoDetalleDTO> listarProyectos() throws Exception;
+
+    // 🆕 nuevo método
+    List<ProyectoDetalleDTO> listarProyectosPorCia(int codCia) throws Exception;
 }

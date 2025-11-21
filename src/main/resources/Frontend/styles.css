@@ -782,3 +782,21 @@ input[type="number"]:focus {
 .real-body #tablaFlujoProy td.editable-cell:hover {
   background-color: #d1fae5;  /* un poquito más intenso */
 }
+
+/* ===================================================
+   REGLA CORREGIDA PARA FILAS NO PROYECTADAS
+   =================================================== */
+
+/* 1. Pinta de amarillo las celdas de NÚMEROS (Ene, Feb, etc.) */
+.real-body #tablaFlujo tr.no-proyectado td:not(.concepto-column) {
+   background-color: #fff6a0 !important;
+   color: #000 !important;
+}
+
+/* 2. Pinta de amarillo la PRIMERA celda (Concepto) */
+/*    Esta regla es más específica que la regla "sticky white" */
+.real-body #tablaFlujo tr.no-proyectado td.concepto-column {
+   background-color: #fff6a0 !important;
+   color: #000 !important;
+   font-style: italic; /* Opcional: añade énfasis */
+}

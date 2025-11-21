@@ -8,6 +8,7 @@ public class FilaFlujoDTO {
     public String codPartidas; // El código de texto, ej: 'ING-001-01'
     public int nivel;
 
+    public boolean noProyectado;
     public String getIngEgr() {
         return ingEgr;
     }

@@ -12,17 +12,18 @@ public class DBConnection {
     // Conexión mantenida por la clase (se reabre si cae)
     private volatile Connection connection;
 
-    // Datos de conexión a Oracle (ajusta según tu entorno) Fabio:
+    // Datos de conexión a Oracle (ajusta según tu entorno)
+    // Oracle de Fabio:
     /*private final String URL = "jdbc:oracle:thin:@//localhost:1522/XEPDB1";
     private final String USER = "HR";
     private final String PASSWORD = "hr";*/
 
     // Oracle de Alex:
-    /* private final String URL = "jdbc:oracle:thin:@//localhost:1521/XEPDB1";
+    /*private final String URL = "jdbc:oracle:thin:@//localhost:1521/XEPDB1";
     private final String USER = "PY DEV02"; 
-    private final String PASSWORD = "123"; */
+    private final String PASSWORD = "123";*/
 
-    // Oracle Anthony
+    // Oracle de Anthony:
     private final String URL = "jdbc:oracle:thin:@//localhost:1521/xe";
     private final String USER = "PY DEV02";
     private final String PASSWORD = "123";

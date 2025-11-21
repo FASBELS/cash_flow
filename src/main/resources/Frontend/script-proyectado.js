@@ -255,8 +255,9 @@ async function cargarConceptosProy(codPyto) {
     const codCia = proyectoSeleccionadoProy.codCia;
     const ver = getVersionActualProy();
 
-    const url = `${API_BASE}/proyectos/${codCia}/${codPyto}/${ver}/arbol`;
-    console.log("[PROY] FETCH árbol:", url);
+    // 🔥 AHORA USAMOS EL ENDPOINT PROYECTADO
+    const url = `${API_BASE}/proyectos/${codCia}/${codPyto}/${ver}/arbol-proyectado`;
+    console.log("[PROY] FETCH árbol proyectado:", url);
 
     const res = await fetch(url, { mode: "cors" });
     if (!res.ok) {
@@ -265,30 +266,25 @@ async function cargarConceptosProy(codPyto) {
     }
 
     const data = await res.json();
-    console.log("[PROY] Árbol crudo:", data);
+    console.log("[PROY] Árbol proyectado:", data);
 
     const arrI = data?.porIngEgr?.I ?? [];
     const arrE = data?.porIngEgr?.E ?? [];
 
-    const ingresosRoots = arrI
-      .map(e => mapEntradaPartidaProy(e, 1))
-      .filter(Boolean);
-    const egresosRoots = arrE
-      .map(e => mapEntradaPartidaProy(e, 1))
-      .filter(Boolean);
+    const ingresosRoots = arrI.map(e => mapEntradaPartidaProy(e, 1)).filter(Boolean);
+    const egresosRoots  = arrE.map(e => mapEntradaPartidaProy(e, 1)).filter(Boolean);
 
-    // aplanamos en listas preorden (SIN sort)
     conceptosCargadosProy.ingresos = flattenTreeProy(ingresosRoots, []);
     conceptosCargadosProy.egresos  = flattenTreeProy(egresosRoots,  []);
 
-    // pintamos usando tu renderer
     renderConceptosProy();
-    setStatusProy("Árbol de partidas cargado.");
+    setStatusProy("Árbol proyectado cargado.");
   } catch (err) {
     console.error("ERROR cargarConceptosProy:", err);
-    alert("No se pudo cargar el árbol de partidas: " + err.message);
+    alert("No se pudo cargar el árbol de partidas proyectadas: " + err.message);
   }
 }
+
 
 
 

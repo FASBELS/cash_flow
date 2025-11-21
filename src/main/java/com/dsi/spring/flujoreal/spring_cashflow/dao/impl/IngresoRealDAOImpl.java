@@ -12,9 +12,9 @@ import com.dsi.spring.flujoreal.spring_cashflow.dao.IngresoRealDAO;
 
 public class IngresoRealDAOImpl implements IngresoRealDAO {
 
-    // Usa FecAbono para ubicar en mes/año (flujo de caja real)
+    // Lógica mejorada: Agregación Multi-Nivel (L3->L2, L3->L1, L2->L1)
     private static final String SQL_MESES = """
-        -- Nivel 3 (Hijos)
+        -- PARTE 1: Valores directos
         SELECT d.CodPartida,
                SUM(CASE WHEN EXTRACT(MONTH FROM c.FecAbono)=1  THEN d.ImpTotalMN ELSE 0 END) AS ene,
                SUM(CASE WHEN EXTRACT(MONTH FROM c.FecAbono)=2  THEN d.ImpTotalMN ELSE 0 END) AS feb,
@@ -29,18 +29,14 @@ public class IngresoRealDAOImpl implements IngresoRealDAO {
                SUM(CASE WHEN EXTRACT(MONTH FROM c.FecAbono)=11 THEN d.ImpTotalMN ELSE 0 END) AS nov,
                SUM(CASE WHEN EXTRACT(MONTH FROM c.FecAbono)=12 THEN d.ImpTotalMN ELSE 0 END) AS dic
         FROM VTACOMP_PAGOCAB c
-        JOIN VTACOMP_PAGODET d
-          ON d.CodCia = c.CodCia
-         AND d.NroCP  = c.NroCP
-        WHERE c.CodCia = ?
-          AND c.CodPyto = ?
-          AND EXTRACT(YEAR FROM c.FecAbono) = ?
+        JOIN VTACOMP_PAGODET d ON d.CodCia = c.CodCia AND d.NroCP = c.NroCP
+        WHERE c.CodCia = ? AND c.CodPyto = ? AND EXTRACT(YEAR FROM c.FecAbono) = ?
         GROUP BY d.CodPartida
 
         UNION ALL
 
-        -- Nivel 2 (Padres) - Calculados desde los hijos
-        SELECT pm.CodPartida AS CodPartida,
+        -- PARTE 2: Agregación recursiva
+        SELECT p_padre.CodPartida,
                SUM(CASE WHEN EXTRACT(MONTH FROM c.FecAbono)=1  THEN d.ImpTotalMN ELSE 0 END) AS ene,
                SUM(CASE WHEN EXTRACT(MONTH FROM c.FecAbono)=2  THEN d.ImpTotalMN ELSE 0 END) AS feb,
                SUM(CASE WHEN EXTRACT(MONTH FROM c.FecAbono)=3  THEN d.ImpTotalMN ELSE 0 END) AS mar,
@@ -54,50 +50,43 @@ public class IngresoRealDAOImpl implements IngresoRealDAO {
                SUM(CASE WHEN EXTRACT(MONTH FROM c.FecAbono)=11 THEN d.ImpTotalMN ELSE 0 END) AS nov,
                SUM(CASE WHEN EXTRACT(MONTH FROM c.FecAbono)=12 THEN d.ImpTotalMN ELSE 0 END) AS dic
         FROM VTACOMP_PAGOCAB c
-        JOIN VTACOMP_PAGODET d
-          ON d.CodCia = c.CodCia
-         AND d.NroCP  = c.NroCP
-        JOIN PARTIDA_MEZCLA pm
-          ON d.CodCia     = pm.CodCia
-         AND d.IngEgr     = pm.IngEgr
-         AND d.CodPartida = pm.PadCodPartida
-        WHERE c.CodCia = ?
-          AND c.CodPyto = ?
-          AND EXTRACT(YEAR FROM c.FecAbono) = ?
-        GROUP BY pm.CodPartida
+        JOIN VTACOMP_PAGODET d ON d.CodCia = c.CodCia AND d.NroCP = c.NroCP
+        JOIN PARTIDA p_trans ON p_trans.CodCia = d.CodCia AND p_trans.IngEgr = d.IngEgr AND p_trans.CodPartida = d.CodPartida
+        JOIN PARTIDA p_padre ON p_padre.CodCia = p_trans.CodCia AND p_padre.IngEgr = p_trans.IngEgr
+        WHERE c.CodCia = ? AND c.CodPyto = ? AND EXTRACT(YEAR FROM c.FecAbono) = ?
+          AND (
+              (p_trans.Nivel = 3 AND p_padre.Nivel = 2 AND p_padre.CodPartidas = SUBSTR(p_trans.CodPartidas, 1, 10))
+              OR
+              (p_trans.Nivel = 3 AND p_padre.Nivel = 1 AND p_padre.CodPartidas = SUBSTR(p_trans.CodPartidas, 1, 7))
+              OR
+              (p_trans.Nivel = 2 AND p_padre.Nivel = 1 AND p_padre.CodPartidas = SUBSTR(p_trans.CodPartidas, 1, 7))
+          )
+        GROUP BY p_padre.CodPartida
         """;
 
-    // También usa FecAbono para el acumulado de años anteriores
     private static final String SQL_ACUM_ANT = """
-        -- Nivel 3 (Hijos)
-        SELECT d.CodPartida,
-               SUM(d.ImpTotalMN) AS acum
+        SELECT d.CodPartida, SUM(d.ImpTotalMN) AS acum
         FROM VTACOMP_PAGOCAB c
-        JOIN VTACOMP_PAGODET d
-          ON d.CodCia = c.CodCia
-         AND d.NroCP  = c.NroCP
-        WHERE c.CodCia = ?
-          AND c.CodPyto = ?
-          AND EXTRACT(YEAR FROM c.FecAbono) < ?
+        JOIN VTACOMP_PAGODET d ON d.CodCia = c.CodCia AND d.NroCP = c.NroCP
+        WHERE c.CodCia = ? AND c.CodPyto = ? AND EXTRACT(YEAR FROM c.FecAbono) < ?
         GROUP BY d.CodPartida
 
         UNION ALL
 
-        -- Nivel 2 (Padres)
-        SELECT pm.CodPartida AS CodPartida,
-               SUM(d.ImpTotalMN) AS acum
+        SELECT p_padre.CodPartida, SUM(d.ImpTotalMN) AS acum
         FROM VTACOMP_PAGOCAB c
-        JOIN VTACOMP_PAGODET d
-          ON d.CodCia = c.CodCia
-         AND d.NroCP  = c.NroCP
-        JOIN PARTIDA_MEZCLA pm
-          ON d.CodCia     = pm.CodCia
-         AND d.IngEgr     = pm.IngEgr
-         AND d.CodPartida = pm.PadCodPartida
-        WHERE c.CodCia = ?
-          AND c.CodPyto = ?
-          AND EXTRACT(YEAR FROM c.FecAbono) < ?
-        GROUP BY pm.CodPartida
+        JOIN VTACOMP_PAGODET d ON d.CodCia = c.CodCia AND d.NroCP = c.NroCP
+        JOIN PARTIDA p_trans ON p_trans.CodCia = d.CodCia AND p_trans.IngEgr = d.IngEgr AND p_trans.CodPartida = d.CodPartida
+        JOIN PARTIDA p_padre ON p_padre.CodCia = p_trans.CodCia AND p_padre.IngEgr = p_trans.IngEgr
+        WHERE c.CodCia = ? AND c.CodPyto = ? AND EXTRACT(YEAR FROM c.FecAbono) < ?
+          AND (
+              (p_trans.Nivel = 3 AND p_padre.Nivel = 2 AND p_padre.CodPartidas = SUBSTR(p_trans.CodPartidas, 1, 10))
+              OR
+              (p_trans.Nivel = 3 AND p_padre.Nivel = 1 AND p_padre.CodPartidas = SUBSTR(p_trans.CodPartidas, 1, 7))
+              OR
+              (p_trans.Nivel = 2 AND p_padre.Nivel = 1 AND p_padre.CodPartidas = SUBSTR(p_trans.CodPartidas, 1, 7))
+          )
+        GROUP BY p_padre.CodPartida
         """;
 
     @Override
@@ -106,22 +95,27 @@ public class IngresoRealDAOImpl implements IngresoRealDAO {
         try (Connection cn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = cn.prepareStatement(SQL_MESES)) {
 
-            // Parte hijos
-            ps.setInt(1, cia);
-            ps.setInt(2, pyto);
-            ps.setInt(3, anno);
-            // Parte padres
-            ps.setInt(4, cia);
-            ps.setInt(5, pyto);
-            ps.setInt(6, anno);
+            ps.setInt(1, cia); ps.setInt(2, pyto); ps.setInt(3, anno);
+            ps.setInt(4, cia); ps.setInt(5, pyto); ps.setInt(6, anno);
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    int cod = rs.getInt("CodPartida");
                     BigDecimal[] m = new BigDecimal[12];
                     for (int i = 0; i < 12; i++) {
-                        m[i] = rs.getBigDecimal(i + 2); // columnas ene..dic
+                        m[i] = rs.getBigDecimal(i + 2);
                     }
-                    out.put(rs.getInt("CodPartida"), m);
+
+                    // --- CORRECCIÓN: ACUMULAR EN LUGAR DE SOBREESCRIBIR ---
+                    if (out.containsKey(cod)) {
+                        BigDecimal[] existing = out.get(cod);
+                        for (int i = 0; i < 12; i++) {
+                            existing[i] = existing[i].add(m[i]);
+                        }
+                    } else {
+                        out.put(cod, m);
+                    }
+                    // -------------------------------------------------------
                 }
             }
         }
@@ -134,18 +128,20 @@ public class IngresoRealDAOImpl implements IngresoRealDAO {
         try (Connection cn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = cn.prepareStatement(SQL_ACUM_ANT)) {
 
-            // Parte hijos
-            ps.setInt(1, cia);
-            ps.setInt(2, pyto);
-            ps.setInt(3, anno);
-            // Parte padres
-            ps.setInt(4, cia);
-            ps.setInt(5, pyto);
-            ps.setInt(6, anno);
+            ps.setInt(1, cia); ps.setInt(2, pyto); ps.setInt(3, anno);
+            ps.setInt(4, cia); ps.setInt(5, pyto); ps.setInt(6, anno);
 
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    out.put(rs.getInt("CodPartida"), rs.getBigDecimal("acum"));
+                    int cod = rs.getInt("CodPartida");
+                    BigDecimal val = rs.getBigDecimal("acum");
+
+                    // --- CORRECCIÓN: ACUMULAR EN LUGAR DE SOBREESCRIBIR ---
+                    if (out.containsKey(cod)) {
+                        out.put(cod, out.get(cod).add(val));
+                    } else {
+                        out.put(cod, val);
+                    }
                 }
             }
         }

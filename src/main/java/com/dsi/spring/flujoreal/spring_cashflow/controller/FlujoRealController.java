@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.dsi.spring.flujoreal.spring_cashflow.dto.FilaFlujoDTO;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.FlujoCajaDetSaveDTO;
+import com.dsi.spring.flujoreal.spring_cashflow.dto.RealMesDTO;
 import com.dsi.spring.flujoreal.spring_cashflow.service.FlujoRealService;
 
 @CrossOrigin(origins = "*")
@@ -26,6 +27,9 @@ public class FlujoRealController {
         this.service = service;
     }
 
+    // ============================================================
+    // 1) Cargar TODO el año desde FLUJOCAJA_DET
+    // ============================================================
     @GetMapping("/real")
     public ResponseEntity<?> real(
             @RequestParam int codCia,
@@ -37,11 +41,36 @@ public class FlujoRealController {
             return ResponseEntity.ok(data);
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.status(500).body(java.util.Map.of("error", e.getMessage()));
+            return ResponseEntity
+                    .status(500)
+                    .body(java.util.Map.of("error", e.getMessage()));
         }
     }
 
-    // 🔹 AGREGAR LA ANOTACIÓN POSTMAPPING Y LA RUTA
+    // ============================================================
+    // 2) NUEVO: Cargar SOLO UN MES desde boletas
+    // ============================================================
+    @GetMapping("/real/mes")
+    public ResponseEntity<?> realMes(
+            @RequestParam int codCia,
+            @RequestParam int codPyto,
+            @RequestParam int anno,
+            @RequestParam int mes
+    ) {
+        try {
+            List<RealMesDTO> data = service.obtenerMesDesdeBoletas(codCia, codPyto, anno, mes);
+            return ResponseEntity.ok(data);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity
+                    .status(500)
+                    .body(java.util.Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ============================================================
+    // 3) Guardar valores reales del año visible
+    // ============================================================
     @PostMapping("/guardar")
     public ResponseEntity<?> guardar(@RequestBody List<FlujoCajaDetSaveDTO> filas) {
         try {
