@@ -32,7 +32,6 @@ public class FlujoRealService {
     private final EgresoRealDAO  egresoRealDAO    = new EgresoRealDAOImpl();
     private final FlujoRealDAO   flujoRealDAO     = new FlujoRealDAOImpl();
 
-    // 1) Obtener valores REALES desde FLUJOCAJA_DET
     public List<FilaFlujoDTO> obtener(int codCia, int codPyto, int anno) throws Exception {
 
         List<FilaFlujoDTO> filasProy = flujoRealDAO.conceptosProyecto(codCia, codPyto);
@@ -121,13 +120,11 @@ public class FlujoRealService {
         return salida;
     }
 
-    // 5) Guardar valores reales
     public void guardar(List<FlujoCajaDetSaveDTO> filas) throws Exception {
         if (filas == null || filas.isEmpty()) return;
         flujoCajaDetDAO.saveOrUpdateBatch(filas);
     }
 
-    // 6) Obtener valores reales de un MES (desde boletas)
     public List<RealMesDTO> obtenerMesDesdeBoletas(
             int codCia,
             int codPyto,
@@ -174,7 +171,6 @@ public class FlujoRealService {
             }
         };
 
-        // INGRESOS
         if (ingMeses != null) {
             for (Map.Entry<Integer, BigDecimal[]> e : ingMeses.entrySet()) {
                 int codPartida = e.getKey();
@@ -194,7 +190,6 @@ public class FlujoRealService {
             }
         }
 
-        // EGRESOS
         if (egrMeses != null) {
             for (Map.Entry<Integer, BigDecimal[]> e : egrMeses.entrySet()) {
                 int codPartida = e.getKey();
@@ -215,7 +210,6 @@ public class FlujoRealService {
             }
         }
 
-        // Agregar partidas que no vinieron (en cero)
         List<FilaFlujoDTO> estructura = flujoRealDAO.conceptosProyecto(codCia, codPyto);
 
         for (FilaFlujoDTO p : estructura) {

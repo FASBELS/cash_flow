@@ -9,26 +9,24 @@
 <body class="real-body">
     <div class="container">
         <h1>Flujo de Caja Proyectado</h1>
-        
-        <!-- Info proyecto seleccionado -->
+
         <div id="proyectoInfoProy" style="margin: 6px 0; font-weight: 600;">
-            <!-- Se llenará desde JS -->
         </div>
 
     <div class="controls-container">
         <div class="left-controls">
 
-            <!-- Selector de compañía para el proyectado -->
+
             <select id="selectCiaProy">
                 <option value="">Seleccione compañía</option>
             </select>
 
-            <!-- Selector de proyectos (se llena con el botón de abajo) -->
+
             <select id="selectProyectoProy" disabled>
                 <option value="">Seleccione proyecto</option>
             </select>
 
-            <!-- Selector de años -->
+
             <select id="yearSelectProy" disabled>
                 <option value="">Año</option>
             </select>
@@ -44,14 +42,14 @@
     </div>
 
             
-        <!-- Hidden PK -->
+
         <input type="hidden" id="codCiaProyHidden">
         <input type="hidden" id="codPytoProyHidden">
 
-        <!-- Mensajes -->
+
         <div id="statusMsgProy" aria-live="polite"></div>
 
-        <!-- Tabla (misma estructura que Real, IDs propios) -->
+
         <div class="table-container" style="overflow-x: auto;">
             <table id="tablaFlujoProy">
                 <thead>

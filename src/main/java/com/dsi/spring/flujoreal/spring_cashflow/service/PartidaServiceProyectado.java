@@ -48,7 +48,6 @@ public class PartidaServiceProyectado {
                 .sorted(ORDEN_COMPARATOR)
                 .collect(Collectors.toList());
 
-        // índices exactos igual al REAL
         Map<Integer, NodoPartidaArbol> idx = new LinkedHashMap<>();
         Map<String, NodoPartidaArbol> idxByCodPartidas = new LinkedHashMap<>();
 
@@ -65,7 +64,6 @@ public class PartidaServiceProyectado {
 
         Set<Integer> attachedChildren = new HashSet<>();
 
-        // ENLACE DE PADRES EXACTO AL REAL
         for (PartidaDTO p : sorted) {
 
             NodoPartidaArbol nodo = idx.get(p.getCodPartida());
@@ -76,7 +74,6 @@ public class PartidaServiceProyectado {
 
             boolean linked = false;
 
-            // numérico
             if (parentCodes.codPartidaPadreNum.isPresent()) {
                 Integer parentNum = parentCodes.codPartidaPadreNum.get();
                 NodoPartidaArbol posiblePadre = idx.get(parentNum);
@@ -90,7 +87,6 @@ public class PartidaServiceProyectado {
                 }
             }
 
-            // textual
             if (!linked && parentCodes.codPartidasPadreStr.isPresent()) {
                 String padreStr = parentCodes.codPartidasPadreStr.get();
                 String key = p.getIngEgr() + "|" + padreStr;
@@ -103,7 +99,6 @@ public class PartidaServiceProyectado {
             }
         }
 
-        // raíces: igual al REAL
         for (PartidaDTO p : sorted) {
             if (!attachedChildren.contains(p.getCodPartida())) {
                 arbol.getPorIngEgr()

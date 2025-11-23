@@ -22,10 +22,7 @@ public class PartidaController {
     private final PartidaService service = new PartidaService();
     private final PartidaServiceProyectado serviceProy = new PartidaServiceProyectado();
 
-
-    // ======================================================
-    //                     FLUJO REAL
-    // ======================================================
+    //real
 
     @GetMapping("/conceptos")
     public List<PartidaDTO> conceptos(
@@ -56,9 +53,7 @@ public class PartidaController {
     }
 
 
-    // ======================================================
-    //                   FLUJO PROYECTADO
-    // ======================================================
+    //proyectado
 
     @GetMapping("/conceptos-proyectados")
     public List<PartidaDTO> conceptosProyectados(

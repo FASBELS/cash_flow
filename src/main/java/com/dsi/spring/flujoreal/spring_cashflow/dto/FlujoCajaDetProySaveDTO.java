@@ -11,7 +11,7 @@ public class FlujoCajaDetProySaveDTO {
     public String ingEgr;
     public int codPartida;
     public int orden;
-    public String tipo;        // A/M/T, etc.
-    public String desPartida;  // opcional, ayuda para FLUJOCAJA
-    public BigDecimal[] impMes;    // longitud 12: [ene, feb, ..., dic]
+    public String tipo;        
+    public String desPartida; 
+    public BigDecimal[] impMes; 
 }

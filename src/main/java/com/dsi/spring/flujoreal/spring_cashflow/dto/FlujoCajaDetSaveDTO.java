@@ -7,11 +7,10 @@ public class FlujoCajaDetSaveDTO {
     public int anno;
     public int codCia;
     public int codPyto;
-    public String ingEgr;     // 'I' ingreso, 'E' egreso
-    public String tipo;       // 'R' flujo real
+    public String ingEgr;     
+    public String tipo;       
     public int codPartida;
-    public int orden;         // posición de la fila en la grilla
+    public int orden;      
 
-    // Montos reales por mes: ene..dic
-    public BigDecimal[] impRealMes;  // 🔹 SIN new[], SIN constructor
+    public BigDecimal[] impRealMes;  
 }

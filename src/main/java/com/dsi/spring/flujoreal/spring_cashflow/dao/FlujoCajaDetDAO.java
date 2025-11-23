@@ -8,9 +8,7 @@ import com.dsi.spring.flujoreal.spring_cashflow.dto.FlujoCajaDetSaveDTO; // fluj
 
 public interface FlujoCajaDetDAO {
 
-    // =======================
-    // FLUJO REAL (ya lo tenías)
-    // =======================
+    //real
     void saveOrUpdate(FlujoCajaDetSaveDTO fila) throws Exception;
 
     default void saveOrUpdateBatch(List<FlujoCajaDetSaveDTO> filas) throws Exception {
@@ -20,9 +18,7 @@ public interface FlujoCajaDetDAO {
         }
     }
 
-    // =======================
-    // FLUJO PROYECTADO (NUEVO)
-    // =======================
+    //proyectado
     void saveOrUpdateProyectado(FlujoCajaDetProySaveDTO fila) throws Exception;
 
     default void saveOrUpdateProyectadoBatch(List<FlujoCajaDetProySaveDTO> filas) throws Exception {

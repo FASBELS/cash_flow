@@ -12,17 +12,14 @@ import com.dsi.spring.flujoreal.spring_cashflow.dto.FlujoCajaDetSaveDTO;
 
 public class FlujoCajaDetDAOImpl implements FlujoCajaDetDAO {  // 👈 IMPORTANTE
 
-    // ============================================================
-    //  FLUJO REAL  (YA EXISTENTE)
-    // ============================================================
+//real
 
 @Override
 public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
     if (f == null) return;
 
-    String tipo = "M"; // Tipo único para real/proyectado en misma fila
+    String tipo = "M";
 
-    // Garantizar array de meses
     BigDecimal[] m = (f.impRealMes != null && f.impRealMes.length >= 12)
             ? f.impRealMes
             : new BigDecimal[12];
@@ -40,15 +37,11 @@ public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
     BigDecimal nov = nz(m[10]);
     BigDecimal dic = nz(m[11]);
 
-    // Suma del año actual
     BigDecimal sumaAnual = ene.add(feb).add(mar).add(abr).add(may).add(jun)
             .add(jul).add(ago).add(sep).add(oct).add(nov).add(dic);
 
     try (Connection cn = DBConnection.getInstance().getConnection()) {
 
-        // ==========================================================
-        // 1) Calcular ImpRealIni leyendo ImpRealAcum del año anterior
-        // ==========================================================
         BigDecimal impRealIni = BigDecimal.ZERO;
 
         String sqlIni = """
@@ -77,13 +70,8 @@ public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
                 }
             }
         }
-
-        // Acumulado del año actual
         BigDecimal impRealAcum = impRealIni.add(sumaAnual);
 
-        // ==========================================================
-        // 2) UPDATE del año actual
-        // ==========================================================
         String upd = """
             UPDATE FLUJOCAJA_DET
                SET ImpRealIni  = ?,
@@ -137,9 +125,6 @@ public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
             rows = ps.executeUpdate();
         }
 
-        // ==========================================================
-        // 3) INSERT si no existía
-        // ==========================================================
         if (rows == 0) {
 
             ensureFlujoCajaRow(
@@ -212,9 +197,6 @@ public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
             }
         }
 
-        // ==========================================================
-        // 4) 🔥 NUEVO: Recalcular toda la cadena hacia adelante
-        // ==========================================================
         recalcCadenaRealForward(
                 cn,
                 f.codCia,
@@ -228,11 +210,6 @@ public void saveOrUpdate(FlujoCajaDetSaveDTO f) throws Exception {
 }
 
 
-/**
- * Recalcula ImpRealIni / ImpRealAcum para todos los años
- * posteriores a annoBase (annoBase+1, annoBase+2, ...)
- * de una misma partida real.
- */
 private void recalcCadenaRealForward(
         Connection cn,
         int codCia,
@@ -300,14 +277,12 @@ private void recalcCadenaRealForward(
                         .add(feb).add(mar).add(abr).add(may).add(jun)
                         .add(jul).add(ago).add(sep).add(oct).add(nov).add(dic);
 
-                // Primer registro del resultset: es el año base (annoBase)
+               
                 if (acumuladoAnterior == null) {
-                    // Sólo tomamos su ImpRealAcum actual como punto de partida
                     acumuladoAnterior = nz(rs.getBigDecimal("ImpRealAcum"));
-                    continue; // NO lo tocamos, ya lo actualizó saveOrUpdate
+                    continue;
                 }
 
-                // Años siguientes: ImpRealIni = acumulado del año anterior
                 BigDecimal impRealIni = acumuladoAnterior;
                 BigDecimal impRealAcum = impRealIni.add(sumaAnual);
 
@@ -336,7 +311,6 @@ private void recalcCadenaRealForward(
                     psUpd.executeUpdate();
                 }
 
-                // Para el siguiente año
                 acumuladoAnterior = impRealAcum;
             }
         }
@@ -345,17 +319,13 @@ private void recalcCadenaRealForward(
 
 
 
-// ============================================================
-//  FLUJO PROYECTADO  (ImpIni / ImpAcum por año)
-// ============================================================
+//proyectado
 @Override
 public void saveOrUpdateProyectado(FlujoCajaDetProySaveDTO f) throws Exception {
     if (f == null) return;
 
-    // Tipo de fila (M, A, etc.) – por defecto "M"
     String tipo = (f.tipo == null || f.tipo.isBlank()) ? "M" : f.tipo;
 
-    // Aseguramos array de 12 posiciones (ene..dic)
     BigDecimal[] m = (f.impMes != null && f.impMes.length >= 12)
             ? f.impMes
             : new BigDecimal[12];
@@ -373,16 +343,12 @@ public void saveOrUpdateProyectado(FlujoCajaDetProySaveDTO f) throws Exception {
     BigDecimal nov = nz(m[10]);
     BigDecimal dic = nz(m[11]);
 
-    // Suma SOLO del año actual (proyectado)
     BigDecimal sumaAnual = ene
             .add(feb).add(mar).add(abr).add(may).add(jun)
             .add(jul).add(ago).add(sep).add(oct).add(nov).add(dic);
 
     try (Connection cn = DBConnection.getInstance().getConnection()) {
 
-        // ---------------------------------------------------------
-        // 1) Calcular ImpIni = ImpAcum del año anterior (Y-1)
-        // ---------------------------------------------------------
         BigDecimal impIni = BigDecimal.ZERO;
 
         String sqlIni = """
@@ -408,18 +374,14 @@ public void saveOrUpdateProyectado(FlujoCajaDetProySaveDTO f) throws Exception {
                 if (rs.next()) {
                     BigDecimal prev = rs.getBigDecimal(1);
                     if (prev != null) {
-                        impIni = prev;   // acumulado del año anterior
+                        impIni = prev; 
                     }
                 }
             }
         }
 
-        // ImpAcum = acumulado anterior + año actual proyectado
         BigDecimal impAcum = impIni.add(sumaAnual);
 
-        // ---------------------------------------------------------
-        // 2) Intentar UPDATE solo sobre columnas PROYECTADAS
-        // ---------------------------------------------------------
         String upd = """
             UPDATE FLUJOCAJA_DET
                SET ImpIni  = ?,
@@ -472,12 +434,9 @@ public void saveOrUpdateProyectado(FlujoCajaDetProySaveDTO f) throws Exception {
             rows = ps.executeUpdate();
         }
 
-        // ---------------------------------------------------------
-        // 3) Si no existe fila, crear padre FLUJOCAJA e INSERT
-        // ---------------------------------------------------------
+
         if (rows == 0) {
 
-            // Asegurar fila padre en FLUJOCAJA
             ensureFlujoCajaRow(
                     cn,
                     f.codCia,
@@ -555,20 +514,9 @@ public void saveOrUpdateProyectado(FlujoCajaDetProySaveDTO f) throws Exception {
     }
 }
 
-
- 
-
-    // ============================================================
-    //  HELPERS COMUNES
-    // ============================================================
     private BigDecimal nz(BigDecimal v) {
         return v == null ? BigDecimal.ZERO : v;
     }
-
-    /**
-     * Helper genérico para crear la fila padre en FLUJOCAJA.
-     * Lo usamos tanto para el REAL como para el PROYECTADO.
-     */
 private void ensureFlujoCajaRow(
         Connection cn,
         int codCia,
@@ -579,7 +527,6 @@ private void ensureFlujoCajaRow(
         int orden
 ) throws Exception {
 
-    // ¿Ya existe?
     String q = """
         SELECT 1
           FROM FLUJOCAJA
@@ -597,12 +544,11 @@ private void ensureFlujoCajaRow(
         ps.setInt(5, codPartida);
         try (var rs = ps.executeQuery()) {
             if (rs.next()) {
-                return; // ya existe
+                return; 
             }
         }
     }
 
-    // Buscar descripción en PARTIDA
     String des = "PARTIDA " + codPartida;
     String q2 = """
         SELECT DesPartida
@@ -622,7 +568,6 @@ private void ensureFlujoCajaRow(
         }
     }
 
-    // Insert en FLUJOCAJA
     String ins = """
         INSERT INTO FLUJOCAJA (
             CodCia, CodPyto, IngEgr, Tipo, CodPartida,

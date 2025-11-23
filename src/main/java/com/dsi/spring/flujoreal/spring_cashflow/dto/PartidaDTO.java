@@ -1,18 +1,14 @@
 package com.dsi.spring.flujoreal.spring_cashflow.dto;
 
-/**
- * DTO para representar partidas de un proyecto.
- * Ampliado para incluir los códigos usados en la jerarquía (CODPARTIDAS y SEMILLA).
- */
 public class PartidaDTO {
 
-    private String ingEgr;        // "I" ingreso, "E" egreso
-    private Integer codPartida;   // puede ser null
-    private String codPartidas;   // código jerárquico (ej: ING-001-01)
+    private String ingEgr;        
+    private Integer codPartida;   
+    private String codPartidas;  
     private String desPartida;
     private int nivel;
-    private Integer semilla;      // vínculo único (boletas)
-    private Integer orden;        // puede ser null
+    private Integer semilla;      
+    private Integer orden;       
     private boolean noProyectado;
 
     // --- Getters y Setters ---

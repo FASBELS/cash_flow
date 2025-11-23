@@ -35,7 +35,6 @@ public class ProyectoController {
         }
     }
 
-    // Nuevo: listar proyectos filtrando por compañía
     @GetMapping(params = "codCia")
     public ResponseEntity<?> listarProyectosPorCia(@RequestParam int codCia) {
         try {

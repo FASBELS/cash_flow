@@ -25,7 +25,6 @@ public class ProyectoService {
     }
 
     public ProyectoDetalleDTO detalle(int codCia, int codPyto) throws Exception {
-        // como tu DAO no tiene "obtenerPorId", buscamos en memoria tras listar
         ProyectoDetalleDTO base = proyectoDAO.listarProyectos().stream()
                 .filter(p -> p.getCodPyto()==codPyto)
                 .findFirst()
@@ -38,14 +37,12 @@ public class ProyectoService {
         dto.setAnnoIni(base.getAnnoIni());
         dto.setAnnoFin(base.getAnnoFin());
 
-        // años: [AnnoIni..AnnoFin]
         List<Integer> anios = new ArrayList<>();
         if (base.getAnnoIni()!=0 && base.getAnnoFin()!=0 && base.getAnnoIni()<=base.getAnnoFin()) {
             for (int y = base.getAnnoIni(); y <= base.getAnnoFin(); y++) anios.add(y);
         }
         dto.setAnios(anios);
 
-        // Inicio/Fin (usamos 01/01 y 31/12 de esos años)
         if (base.getAnnoIni()!=0) dto.setInicio(LocalDate.of(base.getAnnoIni(), 1, 1));
         if (base.getAnnoFin()!=0) dto.setFin(LocalDate.of(base.getAnnoFin(), 12, 31));
 

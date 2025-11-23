@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.util.Arrays;
 
 public class MonthValues {
-    public final BigDecimal[] mes = new BigDecimal[12]; // ene..dic
+    public final BigDecimal[] mes = new BigDecimal[12]; 
     public BigDecimal suma = BigDecimal.ZERO;
     public BigDecimal acumAnt = BigDecimal.ZERO;
     public BigDecimal total = BigDecimal.ZERO;

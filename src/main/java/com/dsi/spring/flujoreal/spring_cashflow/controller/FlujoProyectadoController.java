@@ -19,7 +19,7 @@ import com.dsi.spring.flujoreal.spring_cashflow.service.FlujoProyectadoService;
 
 @RestController
 @RequestMapping("/api/flujo-proyectado")
-@CrossOrigin(origins = "*") // si tu otro controller usa algo distinto, copia ese mismo config
+@CrossOrigin(origins = "*")
 public class FlujoProyectadoController {
 
     private final FlujoProyectadoService flujoProyectadoService;
@@ -28,20 +28,6 @@ public class FlujoProyectadoController {
         this.flujoProyectadoService = flujoProyectadoService;
     }
 
-    /**
-     * Endpoint para obtener los valores del Flujo de Caja Proyectado.
-     *
-     * Parámetros:
-     *  - codCia
-     *  - codPyto
-     *  - anno
-     *
-     * Retorna:
-     *  - Lista de FilaFlujoDTO con:
-     *      * filas de ingresos
-     *      * filas de egresos
-     *      * última fila: FLUJO DE CAJA NETO PROYECTADO
-     */
     @GetMapping("/valores")
     public ResponseEntity<?> obtenerFlujoProyectado(
             @RequestParam("codCia") int codCia,
@@ -64,11 +50,6 @@ public class FlujoProyectadoController {
         }
     }
 
-    /**
-     * 🔹 NUEVO:
-     * Guarda las filas del flujo de caja proyectado que vienen del frontend.
-     * Deben corresponder al año que el usuario tiene en pantalla.
-     */
     @PostMapping("/guardar")
     public ResponseEntity<?> guardarFlujoProyectado(
             @RequestBody List<FlujoCajaDetProySaveDTO> filas

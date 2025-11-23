@@ -18,7 +18,6 @@ import com.dsi.spring.flujoreal.spring_cashflow.dto.MonthValues;
 
 public class FlujoRealDAOImpl implements FlujoRealDAO {
 
-    // 1) Detalle real desde FLUJOCAJA_DET
     @Override
     public Map<Integer, DetValoresDTO> leerDetalleReal(int codCia, int codPyto, int anno) throws Exception {
         String sql = """
@@ -71,7 +70,6 @@ public class FlujoRealDAOImpl implements FlujoRealDAO {
         return x != null ? x : BigDecimal.ZERO;
     }
 
-    // 2) Estructura de conceptos del proyecto
     @Override
     public List<FilaFlujoDTO> conceptosProyecto(int codCia, int codPyto) throws Exception {
 
@@ -112,7 +110,6 @@ public class FlujoRealDAOImpl implements FlujoRealDAO {
         return out;
     }
 
-    // 3) Info de una partida suelta
     @Override
     public FilaFlujoDTO obtenerInfoPartida(int codCia, int codPartida) throws Exception {
 

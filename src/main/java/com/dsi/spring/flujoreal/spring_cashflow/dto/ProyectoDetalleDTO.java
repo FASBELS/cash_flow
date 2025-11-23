@@ -14,7 +14,7 @@ public class ProyectoDetalleDTO {
     private Integer annoFin;
     private List<Integer> anios;
 
-    @JsonFormat(pattern = "yyyy-MM-dd")  // para que el frontend lo reciba como "2025-01-01"
+    @JsonFormat(pattern = "yyyy-MM-dd") 
     private LocalDate inicio;
 
     @JsonFormat(pattern = "yyyy-MM-dd")

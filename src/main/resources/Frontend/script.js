@@ -1,5 +1,3 @@
-// Frontend/script.js
-// Bases de API
 const PROJECTS_BASE = "http://localhost:8080/api/proyectos";
 const API_BASE      = "http://localhost:8080/api";
 let proyectos = [];
@@ -10,7 +8,6 @@ let annoSeleccionado = null;
 let mapaProyectado = {};
 let comparacionActiva = false; 
 let valoresRealesPorAnno = {}; 
-// Flags de flujo de trabajo
 let conceptosYaCargados   = false;
 let valoresRealesActivos  = false;
 let ciaSeleccionada = null;
@@ -26,7 +23,6 @@ function setStatus(msg) {
 
 const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 
-/** Lee versión si existe un <select id="versionSelect">; si no, usa "1" */
 function getVersionActual() {
   const sel = document.getElementById("versionSelect");
   const v = sel?.value?.trim();
@@ -61,7 +57,6 @@ function ensureTree(data) {
         if (!padre.ingEgr || !nodo.ingEgr || padre.ingEgr === nodo.ingEgr) {
           padre.children.push(nodo);
         } else {
-          // defensa si mezclan I/E
           roots.push(nodo);
         }
       }
@@ -94,12 +89,9 @@ function ensureTree(data) {
   return root;
 }
 
-/** Mapea una entrada del formato { partida:{...}, hijos:[...] } al nodo usado en el front */
 function mapEntradaPartida(entry, nivelBase = 1) {
   console.log("DEBUG mapEntradaPartida ENTRY:", entry);
   if (!entry) return null;
-
-  // puede venir como {partida:{...}, hijos:[...]} o ya ser el objeto partida
   const p = entry.partida || entry;
 
   const nodo = {
@@ -127,7 +119,6 @@ function mapEntradaPartida(entry, nivelBase = 1) {
   return nodo;
 }
 
-/** Recorrido preorden para aplanar el árbol con info de nivel */
 function flattenTree(tree, out = []) {
   const visit = (n) => {
     out.push(n);
@@ -137,7 +128,6 @@ function flattenTree(tree, out = []) {
   return out;
 }
 
-/** Divide raíces por tipo I/E (solo para el caso genérico plano) */
 function splitByTipo(tree) {
   return {
     ingresos: (tree || []).filter(n => (n.ingEgr || "").toUpperCase() === "I"),
@@ -145,7 +135,6 @@ function splitByTipo(tree) {
   };
 }
 
-// (esta primera init queda sobrescrita por la de abajo, pero la mantengo intacta)
 async function init() {
   crearHeaderTabla();
   agregarFilasBase();
@@ -202,7 +191,6 @@ function agregarFilasBase() {
   tbody.appendChild(trNet);
 }
 
-// 🔧 acepta flag para decidir si borra selección del proyecto
 function resetTabla(resetProyecto = false) {
   conceptosCargados = { ingresos: [], egresos: [] };
   proyectoSeleccionado = null;
@@ -223,22 +211,20 @@ function resetTabla(resetProyecto = false) {
     setStatus("");
   }
 
-  // 🆕 al resetear tabla, también reseteamos comparación visual
   resetComparacionVisual();
 
   agregarFilasBase();
 }
 
-// ================== CARGA DE COMPAÑÍAS ==================
+//CARGA DE COMPAÑÍAS 
 async function cargarCias() {
   const selectCia = document.getElementById("selectCia");
-  if (!selectCia) return; // por si no estamos en esta pantalla
+  if (!selectCia) return;
 
   try {
     selectCia.disabled = true;
     selectCia.innerHTML = '<option value="">-- Seleccione compañía --</option>';
 
-    // 👇 Ajusta la URL según el controller que hagas en el backend
     const res = await fetch(`${API_BASE}/cias`);
     if (!res.ok) throw new Error("Error al obtener compañías");
 
@@ -271,11 +257,9 @@ async function cargarProyectos(codCia) {
   }
 
   try {
-    // 👇 Ajusta según cómo hagas el endpoint en el backend
-    // Opción 1: /api/proyectos?codCia=1
+
     const res = await fetch(`${PROJECTS_BASE}?codCia=${codCia}`);
 
-    // Opción 2 (si prefieres path): const res = await fetch(`${PROJECTS_BASE}/${codCia}`);
 
     if (!res.ok) throw new Error("Error al obtener proyectos");
     proyectos = await res.json();
@@ -318,7 +302,7 @@ async function cargarValoresRealesDeTodosLosAnios() {
   const yearSelect = document.getElementById("yearSelect");
   if (!yearSelect) return;
 
-  valoresRealesPorAnno = {}; // limpiamos cache para este proyecto
+  valoresRealesPorAnno = {};
 
   const anios = Array.from(yearSelect.options)
     .map(o => parseInt(o.value, 10))
@@ -332,15 +316,14 @@ async function cargarValoresRealesDeTodosLosAnios() {
       console.error(`Error cargando valores reales ${anio}:`, txt || `HTTP ${res.status}`);
       continue;
     }
-    const data = await res.json();             // { ... filas ... }
-    valoresRealesPorAnno[anio] = data;        // 👈 guardamos en cache
+    const data = await res.json();         
+    valoresRealesPorAnno[anio] = data;        
   }
 
   setStatus("Valores reales cargados para todos los años.");
 }
 
 async function asegurarValoresParaAnno(anno) {
-  // Si ya tenemos ese año en cache, no hacemos nada
   if (valoresRealesPorAnno[anno]) return;
 
   if (!proyectoSeleccionado) return;
@@ -357,7 +340,7 @@ async function asegurarValoresParaAnno(anno) {
   }
 
   const data = await res.json();
-  valoresRealesPorAnno[anno] = data; // guardamos en cache
+  valoresRealesPorAnno[anno] = data;
 }
 
 function crearFilaNodo(nodo) {
@@ -366,7 +349,6 @@ function crearFilaNodo(nodo) {
 
   const nivel = Number(nodo.nivel ?? 1);
 
-  // Guardamos nivel y flags en attributes del <tr>
   tr.dataset.nivel = String(nivel);
   if (nodo.noProyectado) {
     tr.classList.add("no-proyectado");
@@ -375,7 +357,6 @@ function crearFilaNodo(nodo) {
 
   if (nodo.ingEgr) tr.dataset.ingEgr = nodo.ingEgr;
   if (nodo.codPartidas) tr.dataset.codPartidas = nodo.codPartidas;
-  // usa codPartida como identificador único
   if (nodo.codPartida != null) tr.dataset.codPartida = String(nodo.codPartida);
   if (nodo.parentId != null) tr.dataset.parentPartida = String(nodo.parentId);
 
@@ -383,13 +364,11 @@ function crearFilaNodo(nodo) {
   tdConcepto.classList.add("concepto-column");
   tdConcepto.dataset.codPartida = nodo.codPartida;
 
-  // Sangría por nivel (visual)
   tdConcepto.style.paddingLeft = `${Math.max(0, nivel - 1) * 16}px`;
 
   tdConcepto.textContent = nodo.desPartida || nodo.descripcion || nodo.nombre || "";
   tr.appendChild(tdConcepto);
 
-  // 12 meses + Suma + Acum Ant + Total
   for (let i = 0; i < 15; i++) {
     const td = document.createElement("td");
     td.textContent = "0.00";
@@ -408,52 +387,39 @@ function encontrarAnclaDeInsercion(tbody, nodo) {
 
    if (!ingEgr || !codPartidas) {
      console.warn("Nodo sin ingEgr o codPartidas", nodo);
-     return null; // No se puede ordenar
+     return null; 
    }
 
    const filas = tbody.querySelectorAll("tr.data-row");
-   let mejorAncla = null; // Esta será la fila <tr>
+   let mejorAncla = null; 
 
-   // 1. Encontrar el ancla por defecto (el cabecero "INGRESOS" o "EGRESOS")
    if (ingEgr === 'I') {
-     // Para Ingresos, el ancla es el primer cabecero.
      mejorAncla = tbody.querySelector("tr.separator-row:first-of-type");
    } else {
-      // Para Egresos, el ancla es el segundo cabecero.
-      // Usamos :nth-of-type(2) para ser más específicos.
       mejorAncla = tbody.querySelector("tr.separator-row:nth-of-type(2)");
   }
 
-   // 2. Iterar sobre las filas de datos existentes para encontrar un ancla mejor.
-   // Buscamos la *última* fila que alfabéticamente venga *antes* que nuestro nodo.
    for (const fila of filas) {
      const filaIngEgr = fila.dataset.ingEgr;
      const filaCodPartidas = fila.dataset.codPartidas;
 
-     // Ignorar filas de la otra sección o filas sin código
      if (filaIngEgr !== ingEgr || !filaCodPartidas) {
        continue;
       }
 
-     // Comparamos alfabéticamente (ej. "EGR-001-01" vs "EGR-001-02")
      if (filaCodPartidas.localeCompare(codPartidas) < 0) {
-       // Esta fila (filaCodPartidas) viene ANTES que nuestro nuevo nodo (codPartidas).
-       // Por lo tanto, es un ancla válida. La guardamos.
+
        mejorAncla = fila;
      }
-     // Si la fila viene *después*, la ignoramos y seguimos buscando.
 }
 
-   // Al final del bucle, 'mejorAncla' será la fila cabecera O
-   // la última fila de datos que viene antes que nuestro nuevo nodo.
    return mejorAncla;
 }
 
 async function aplicarValoresDesdeCache(anno) {
-    // 1. Asegurar datos en cache
     await asegurarValoresParaAnno(anno);
     
-    const data = valoresRealesPorAnno[anno]; // Esta es la LISTA PLANA del backend
+    const data = valoresRealesPorAnno[anno];
     if (!data) {
         console.warn("No hay datos en cache para el año", anno);
         return;
@@ -462,7 +428,7 @@ async function aplicarValoresDesdeCache(anno) {
     const tbody = document.getElementById("bodyRows");
     if (!tbody) return;
 
-    // 2. Limpiar valores y comparación
+
     resetCeldasNumericas();
     resetComparacionVisual();
 
@@ -470,40 +436,33 @@ async function aplicarValoresDesdeCache(anno) {
     const filasNoProyectadasEnDOM = tbody.querySelectorAll("tr.no-proyectado");
     
     filasNoProyectadasEnDOM.forEach(fila => {
-        fila.style.display = 'none'; // Ocultar por defecto
+        fila.style.display = 'none'; 
     });
 
-    // 4. Identificar filas que faltan en el HTML y añadirlas O mostrarlas
     data.forEach(nodo => {
-        if (nodo.ingEgr === 'N' || nodo.codPartida === 0) return; // Ignorar el NETO
+        if (nodo.ingEgr === 'N' || nodo.codPartida === 0) return; 
 
-        // Registrar que esta partida SÍ tiene datos este año
         filasProyectadasEsteAnno.add(String(nodo.codPartida)); 
 
         const filaExistente = tbody.querySelector(`tr > td[data-cod-partida="${nodo.codPartida}"]`);
         
         if (!filaExistente) {
-            // ¡La fila no existe! (Ej. "Subvención")
             console.log("Creando fila faltante para:", nodo.desPartida);
-            const nuevaFila = crearFilaNodo(nodo); // Esta fila ya tendrá .no-proyectado
+            const nuevaFila = crearFilaNodo(nodo); 
             
             const ancla = encontrarAnclaDeInsercion(tbody, nodo);
             
             if (ancla) {
-                ancla.after(nuevaFila); // Insertar después del ancla
+                ancla.after(nuevaFila); 
             } else {
                 tbody.appendChild(nuevaFila);
             }
-            // No es necesario 'fila.style.display = "table-row"' porque es nueva
             
         } else if (filaExistente.parentElement.classList.contains("no-proyectado")) {
-            // La fila SÍ existe y ES no proyectada (ej. ya la creó el año 2025)
-            // Simplemente la volvemos a mostrar.
             filaExistente.parentElement.style.display = 'table-row';
         }
     });
 
-    // 5. Pintar los valores en TODAS las filas (existentes y nuevas)
     data.forEach(row => {
         if (row.ingEgr === "N") {
             pintarFilaNeto(row.valores);
@@ -525,7 +484,7 @@ function setupEventListeners() {
   // Al inicio, los proyectos no se pueden elegir hasta cargar
   selectProyecto.disabled = true;
 
-  // 🆕 Cuando cambio de compañía
+  // Cuando cambio de compañía
   selectCia.addEventListener("change", (e) => {
     const codCia = parseInt(e.target.value, 10) || 0;
 
@@ -573,8 +532,7 @@ function setupEventListeners() {
       btn.textContent = "Cargando...";
 
       try {
-        // 🆕 ahora cargamos proyectos filtrados por compañía
-        await cargarProyectos(codCia);   // <-- asegúrate de que cargarProyectos(codCia) exista
+        await cargarProyectos(codCia);  
         btn.classList.remove("btn-off");
         btn.textContent = "Proyectos";
         select.disabled = false;
@@ -594,7 +552,7 @@ function setupEventListeners() {
     const yearSelect  = document.getElementById("yearSelect");
     const fechaInicio = document.getElementById("fechaInicio");
     const fechaFin    = document.getElementById("fechaFin");
-    const yearDisplay = document.getElementById("yearDisplay"); // puede no existir
+    const yearDisplay = document.getElementById("yearDisplay");
     const selectCia   = document.getElementById("selectCia");
 
     if (!e.target.value) {
@@ -609,7 +567,6 @@ function setupEventListeners() {
     resetTabla(false);
 
     const codPyto = parseInt(e.target.value, 10);
-    // 🆕 tomamos el codCia del combo de compañía (ya no fijo en 1)
     const codCia  = parseInt(selectCia.value, 10) || 0;
 
     const optSel  = e.target.options[e.target.selectedIndex];
@@ -660,7 +617,7 @@ function setupEventListeners() {
 
   const btnPrev = document.getElementById("btnYearPrev");
   if (btnPrev) {
-    btnPrev.addEventListener("click", async () => {   // 👈 async
+    btnPrev.addEventListener("click", async () => { 
       if (!proyectoSeleccionado) return;
 
       if (annoSeleccionado > proyectoSeleccionado.annoIni) {
@@ -668,11 +625,9 @@ function setupEventListeners() {
         const yearDisplay = document.getElementById("yearDisplay");
         if (yearDisplay) yearDisplay.textContent = String(annoSeleccionado);
 
-        // 🆕 Solo aplicamos valores si el usuario ya presionó "Valores"
         if (valoresRealesActivos) {
           await aplicarValoresDesdeCache(annoSeleccionado);
         } else {
-          // Sin valores activos: dejamos solo la estructura (conceptos en 0.00)
           resetCeldasNumericas();
           resetComparacionVisual();
         }
@@ -682,7 +637,7 @@ function setupEventListeners() {
 
   const btnNext = document.getElementById("btnYearNext");
   if (btnNext) {
-    btnNext.addEventListener("click", async () => {   // 👈 async
+    btnNext.addEventListener("click", async () => {  
       if (!proyectoSeleccionado) return;
 
       if (annoSeleccionado < proyectoSeleccionado.annoFin) {
@@ -690,11 +645,9 @@ function setupEventListeners() {
         const yearDisplay = document.getElementById("yearDisplay");
         if (yearDisplay) yearDisplay.textContent = String(annoSeleccionado);
 
-        // 🆕 Solo cargar valores si el usuario ya presionó el botón "Valores"
         if (valoresRealesActivos) {
           await aplicarValoresDesdeCache(annoSeleccionado);
         } else {
-          // Si no, mostramos solo la estructura sin valores
           resetCeldasNumericas();
           resetComparacionVisual();
         }
@@ -710,7 +663,6 @@ function setupEventListeners() {
         return;
       }
 
-      // 🆕 NO se puede cargar valores si no se cargaron conceptos
       if (!conceptosYaCargados) {
         alert("Primero cargue los conceptos.");
         return;
@@ -726,7 +678,7 @@ function setupEventListeners() {
           await aplicarValoresDesdeCache(annoSeleccionado); // pinta el año actual
         }
 
-        // 🆕 marcamos que los valores están activos
+        // marcamos que los valores están activos
         valoresRealesActivos = true;
         setStatus("Valores reales cargados. Navegue entre los años.");
       } catch (e) {
@@ -741,7 +693,7 @@ function setupEventListeners() {
 
   const yearSelectEl2 = document.getElementById("yearSelect");
   if (yearSelectEl2) {
-    yearSelectEl2.addEventListener("change", async e => {  // 👈 async
+    yearSelectEl2.addEventListener("change", async e => {  // async
       if (!proyectoSeleccionado) return;
 
       annoSeleccionado = parseInt(e.target.value, 10);
@@ -749,7 +701,7 @@ function setupEventListeners() {
       const yd = document.getElementById("yearDisplay");
       if (yd) yd.textContent = String(annoSeleccionado);
 
-      // 🆕 Solo cargar valores si el usuario ya presionó el botón "Valores"
+      // Solo cargar valores si el usuario ya presionó el botón "Valores"
       if (valoresRealesActivos) {
         await aplicarValoresDesdeCache(annoSeleccionado);
       } else {
@@ -759,7 +711,7 @@ function setupEventListeners() {
       }
     });
   }
-  // 🆕 Botón Cargar mes (flujo real)
+  // Botón Cargar mes (flujo real)
   const btnCargarMes = document.getElementById("btnCargarMes");
   if (btnCargarMes) {
     btnCargarMes.addEventListener("click", cargarMesDesdeBoletas);
@@ -781,7 +733,7 @@ if (btnRefactorizar) {
     btnGuardarTodos.addEventListener("click", guardarTodosLosAnios);
   }
 
-  // 🆕 Botón Ver diferencias con el proyectado (toggle)
+  // Botón Ver diferencias con el proyectado (toggle)
   const btnComparar = document.getElementById("btnComparar");
   if (btnComparar) {
     btnComparar.addEventListener("click", async () => {
@@ -840,8 +792,6 @@ if (btnRefactorizar) {
   }
 };
 
-
-// ========= MODIFICADO: cargar conceptos desde /proyectos/{cia}/{pyto}/{ver}/arbol =========
 async function cargarConceptos(codPyto) {
   try {
     if (!proyectoSeleccionado) throw new Error("Seleccione primero un proyecto.");
@@ -868,16 +818,13 @@ async function cargarConceptos(codPyto) {
     const ingresosRoots = arrI.map(e => mapEntradaPartida(e, 1));
     const egresosRoots  = arrE.map(e => mapEntradaPartida(e, 1));
 
-    // Aplanar preorden
     conceptosCargados.ingresos = flattenTree(ingresosRoots);
     conceptosCargados.egresos  = flattenTree(egresosRoots);
 
-    // Pintar
     renderArbolEnTabla();
     setStatus("Árbol de partidas cargado.");
 
     conceptosYaCargados  = true;
-    // y reseteamos cualquier estado de valores anteriores
     valoresRealesActivos = false;
     resetCeldasNumericas();
      
@@ -887,13 +834,10 @@ async function cargarConceptos(codPyto) {
   }
 }
 
-
-// ========= NUEVO: render del árbol en tu misma tabla =========
 function renderArbolEnTabla() {
   const tbody = document.getElementById("bodyRows");
   tbody.innerHTML = "";
 
-  // Header INGRESOS
   const trIngHeader = document.createElement("tr");
   trIngHeader.classList.add("separator-row");
   const tdIng = document.createElement("td");
@@ -904,7 +848,6 @@ function renderArbolEnTabla() {
 
   conceptosCargados.ingresos.forEach(n => tbody.appendChild(crearFilaNodo(n)));
 
-  // Header EGRESOS
   const trEgrHeader = document.createElement("tr");
   trEgrHeader.classList.add("separator-row");
   const tdEgr = document.createElement("td");
@@ -915,7 +858,6 @@ function renderArbolEnTabla() {
 
   conceptosCargados.egresos.forEach(n => tbody.appendChild(crearFilaNodo(n)));
 
-  // NETO
   const trNet = document.createElement("tr");
   trNet.classList.add("separator-neto");
   const tdNet = document.createElement("td");
@@ -928,7 +870,6 @@ function renderArbolEnTabla() {
   }
   tbody.appendChild(trNet);
 
-  // Mensaje vacío
   if (!conceptosCargados.ingresos.length && !conceptosCargados.egresos.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -941,8 +882,6 @@ function renderArbolEnTabla() {
 
 }
 
-// === CARGAR PROYECTADO PARA COMPARAR ===
-// Usa FlujoProyectadoController: /api/flujo-proyectado/valores
 async function cargarMapaProyectado(codCia, codPyto, anno) {
   mapaProyectado = {};
 
@@ -985,11 +924,9 @@ async function cargarMapaProyectado(codCia, codPyto, anno) {
   console.log("[COMPARE] mapaProyectado:", mapaProyectado);
 }
 
-// === APLICAR / LIMPIAR COLORES POR COMPARACIÓN ===
 function actualizarEstiloCeldaComparacion(celdaEl, codPartida, mes) {
   if (!celdaEl || !codPartida || !mes) return;
 
-  // limpiar estilo previo (incluyendo posibles !important)
   celdaEl.style.removeProperty("color");
   celdaEl.style.fontWeight = "";
 
@@ -1008,7 +945,6 @@ function actualizarEstiloCeldaComparacion(celdaEl, codPartida, mes) {
     celdaEl.style.setProperty("color", "green", "important");
     celdaEl.style.fontWeight = "600";
   }
-  // igual: sin cambios
 }
 
 function aplicarComparacionCeldas() {
@@ -1046,7 +982,6 @@ function limpiarComparacionCeldas() {
   });
 }
 
-// 🆕 Helper: resetear estado visual de comparación (texto + colores + mapa)
 function resetComparacionVisual() {
   const btnComparar = document.getElementById("btnComparar");
   comparacionActiva = false;
@@ -1118,7 +1053,6 @@ function pintarFilaNeto(valores) {
   celdas[15].textContent = formatNumber(valores.total ?? 0);
 }
 
-// 🆕 Recalcular suma / total de una fila (cuando cambiamos un mes)
 function recalcularFilaPartidaReal(tr) {
   const tds = Array.from(tr.querySelectorAll("td"));
   const celdasMes = tds.filter(td => td.dataset.mes);
@@ -1490,8 +1424,6 @@ async function construirFilasParaAnnoDesdeBackend(anio) {
   }
 }
 
-// 🆕 Cargar SOLO un mes desde boletas (endpoint /api/valores/real/mes)
-// con validación para no permitir meses "del futuro"
 async function cargarMesDesdeBoletas() {
   if (!proyectoSeleccionado || !annoSeleccionado) {
     alert("Seleccione proyecto y año antes de cargar un mes.");
@@ -1503,22 +1435,19 @@ async function cargarMesDesdeBoletas() {
     return;
   }
 
-  // === Fecha actual del sistema ===
+  // Fecha actual del sistema 
   const hoy = new Date();
   const annoActual = hoy.getFullYear();
   const mesActual = hoy.getMonth() + 1; // 1..12
 
-  // === Determinar el máximo mes que se puede cargar para el año seleccionado ===
+  // Determinar el máximo mes que se puede cargar para el año seleccionado
   let maxMesCargable;
 
   if (annoSeleccionado < annoActual) {
-    // Años pasados: se permite hasta diciembre
     maxMesCargable = 12;
   } else if (annoSeleccionado === annoActual) {
-    // Año actual: hasta el mes actual (no permitir meses futuros)
     maxMesCargable = mesActual;
   } else {
-    // Año futuro: no se permite cargar nada
     alert("No puede cargar meses de años futuros respecto a la fecha actual.");
     return;
   }
@@ -1581,7 +1510,7 @@ async function cargarMesDesdeBoletas() {
     valoresRealesActivos = true;
 
     setStatus(`Mes ${mes} cargado desde boletas. Revise y luego pulse Guardar.`);
-    alert(`Mes ${mes} cargado correctamente desde las boletas ✅`);
+    alert(`Mes ${mes} cargado correctamente desde las boletas `);
   } catch (err) {
     console.error("Error al cargar mes desde boletas:", err);
     setStatus("Error al cargar el mes desde boletas.");
@@ -1774,13 +1703,13 @@ async function guardarFlujoReal() {
       }
     });
 
-    // 🔄 RECARGAR desde backend el año visible
+    //RECARGAR desde backend el año visible
     await asegurarValoresParaAnno(annoSeleccionado);
     await aplicarValoresDesdeCache(annoSeleccionado);
     valoresRealesActivos = true;
 
     setStatus("Flujo real guardado correctamente.");
-    alert("Flujo de caja real guardado correctamente ✅");
+    alert("Flujo de caja real guardado correctamente ");
   } catch (err) {
     console.error("Error al guardar flujo real:", err);
     setStatus("Error al guardar flujo real.");
@@ -1859,7 +1788,6 @@ async function guardarTodosLosAnios() {
   }
 }
 
-// Inicialización final
 async function initRealFlow() {
   const tieneTablaFlujoReal =
     document.getElementById("headerRow") &&
@@ -1868,7 +1796,7 @@ async function initRealFlow() {
   if (tieneTablaFlujoReal) {
     crearHeaderTabla();
     agregarFilasBase();
-    await cargarCias();       // 👈 CARGA LAS COMPAÑÍAS APENAS ENTRA
+    await cargarCias();   
     setupEventListeners();
   }
 }

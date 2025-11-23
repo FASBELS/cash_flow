@@ -27,9 +27,6 @@ public class FlujoRealController {
         this.service = service;
     }
 
-    // ============================================================
-    // 1) Cargar TODO el año desde FLUJOCAJA_DET
-    // ============================================================
     @GetMapping("/real")
     public ResponseEntity<?> real(
             @RequestParam int codCia,
@@ -47,9 +44,6 @@ public class FlujoRealController {
         }
     }
 
-    // ============================================================
-    // 2) NUEVO: Cargar SOLO UN MES desde boletas
-    // ============================================================
     @GetMapping("/real/mes")
     public ResponseEntity<?> realMes(
             @RequestParam int codCia,
@@ -68,9 +62,6 @@ public class FlujoRealController {
         }
     }
 
-    // ============================================================
-    // 3) Guardar valores reales del año visible
-    // ============================================================
     @PostMapping("/guardar")
     public ResponseEntity<?> guardar(@RequestBody List<FlujoCajaDetSaveDTO> filas) {
         try {

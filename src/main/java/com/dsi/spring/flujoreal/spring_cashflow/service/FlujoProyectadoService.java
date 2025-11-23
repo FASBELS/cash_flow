@@ -1,4 +1,3 @@
-// src/main/java/com/dsi/spring/flujoreal/spring_cashflow/service/FlujoProyectadoService.java
 package com.dsi.spring.flujoreal.spring_cashflow.service;
 
 import java.math.BigDecimal;
@@ -112,15 +111,6 @@ public class FlujoProyectadoService {
         flujoCajaDetDAO.saveOrUpdateProyectadoBatch(filas);
     }
 
-        /**
-     * Obtiene:
-     * - Partidas PROYECTADAS = existen en PROY_PARTIDA (versión vigente)
-     *   (las retorna como noProyectado = false)
-     *
-     * - Partidas NO PROYECTADAS = existen en comprobantes reales (COMP_PAGODET/VTACOMP_PAGODET)
-     *   pero NO existen en PROY_PARTIDA (las marca noProyectado = true pero **NO** se devuelven
-     *   en la lista final del flujo proyectado)
-     */
     private List<FilaFlujoDTO> conceptosProyectoProyectado(int codCia, int codPyto) throws Exception {
 
         List<FilaFlujoDTO> lista = new ArrayList<>();

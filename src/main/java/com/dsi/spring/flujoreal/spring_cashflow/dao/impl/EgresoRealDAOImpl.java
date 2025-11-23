@@ -104,8 +104,7 @@ public class EgresoRealDAOImpl implements EgresoRealDAO {
                     for (int i = 0; i < 12; i++) {
                         m[i] = rs.getBigDecimal(i + 2);
                     }
-                    
-                    // --- CORRECCIÓN: ACUMULAR EN LUGAR DE SOBREESCRIBIR ---
+
                     if (out.containsKey(cod)) {
                         BigDecimal[] existing = out.get(cod);
                         for (int i = 0; i < 12; i++) {
@@ -134,7 +133,6 @@ public class EgresoRealDAOImpl implements EgresoRealDAO {
                     int cod = rs.getInt("CodPartida");
                     BigDecimal val = rs.getBigDecimal("acum");
 
-                    // --- CORRECCIÓN: ACUMULAR EN LUGAR DE SOBREESCRIBIR ---
                     if (out.containsKey(cod)) {
                         out.put(cod, out.get(cod).add(val));
                     } else {

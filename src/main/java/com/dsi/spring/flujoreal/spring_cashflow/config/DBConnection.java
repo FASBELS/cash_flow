@@ -6,13 +6,9 @@ import java.sql.SQLException;
 
 public class DBConnection {
 
-    // Instancia única (Singleton)
     private static volatile DBConnection instance;
-
-    // Conexión mantenida por la clase (se reabre si cae)
     private volatile Connection connection;
 
-    // Datos de conexión a Oracle (ajusta según tu entorno)
     // Oracle de Fabio:
     /*private final String URL = "jdbc:oracle:thin:@//localhost:1522/XEPDB1";
     private final String USER = "HR";
@@ -24,11 +20,10 @@ public class DBConnection {
     private final String PASSWORD = "123";*/
 
     // Oracle de Anthony:
-    private final String URL = "jdbc:oracle:thin:@//localhost:1522/XEPDB1";
-    private final String USER = "HR";
-    private final String PASSWORD = "hr";
+    private final String URL = "jdbc:oracle:thin:@//localhost:1521/xe";
+    private final String USER = "PY DEV02";
+    private final String PASSWORD = "123";
 
-    // Tiempo (seg) para isValid()
     private static final int VALID_TIMEOUT = 5;
 
     // Constructor privado
@@ -36,25 +31,21 @@ public class DBConnection {
         openNewConnection();
     }
 
-    /** Crea una nueva conexión (reutilizado en constructor y reintentos). */
     private synchronized void openNewConnection() {
         try {
-            // Driver (opcional en JDBC 4+, pero lo dejamos)
             Class.forName("oracle.jdbc.driver.OracleDriver");
 
-            // Nueva conexión
             this.connection = DriverManager.getConnection(URL, USER, PASSWORD);
-            System.out.println("✅ Conexión Oracle abierta (Singleton).");
+            System.out.println("Conexión Oracle abierta (Singleton).");
         } catch (ClassNotFoundException e) {
-            System.err.println("❌ Driver Oracle no encontrado: " + e.getMessage());
+            System.err.println("Driver Oracle no encontrado: " + e.getMessage());
             this.connection = null;
         } catch (SQLException e) {
-            System.err.println("❌ Error conectando a Oracle: " + e.getMessage());
+            System.err.println("Error conectando a Oracle: " + e.getMessage());
             this.connection = null;
         }
     }
 
-    /** Obtiene la instancia única. */
     public static DBConnection getInstance() {
         if (instance == null) {
             synchronized (DBConnection.class) {
@@ -66,21 +57,17 @@ public class DBConnection {
         return instance;
     }
 
-    /**
-     * Retorna una conexión válida. Si la existente está cerrada o inválida,
-     * se reabre automáticamente.
-     */
     public synchronized Connection getConnection() throws SQLException {
         try {
             if (this.connection == null
                     || this.connection.isClosed()
                     || !this.connection.isValid(VALID_TIMEOUT)) {
-                System.out.println("ℹ️ Conexión inválida/cerrada. Reabriendo...");
+                System.out.println("Conexión inválida/cerrada. Reabriendo...");
                 openNewConnection();
             }
         } catch (SQLException e) {
             // Si falla la validación, intentamos reabrir
-            System.out.println("ℹ️ Validación falló (" + e.getMessage() + "). Reabriendo...");
+            System.out.println("Validación falló (" + e.getMessage() + "). Reabriendo...");
             openNewConnection();
         }
 

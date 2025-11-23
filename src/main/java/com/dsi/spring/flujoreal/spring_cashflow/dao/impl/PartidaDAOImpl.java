@@ -13,13 +13,6 @@ import com.dsi.spring.flujoreal.spring_cashflow.dto.PartidaDTO;
 
 public class PartidaDAOImpl implements PartidaDAO {
 
-    /**
-     * Si tus tablas están en otro esquema (p.ej. DSI), pon aquí el owner:
-     *  - Deja "" si están en el mismo usuario de conexión.
-     *  - Ejemplo: SCHEMA = "DSI";
-     *
-     * También puedes definir -DDB_SCHEMA=DSI al ejecutar.
-     */
     private static final String SCHEMA =
             System.getProperty("DB_SCHEMA", "").trim();
 
@@ -27,17 +20,14 @@ public class PartidaDAOImpl implements PartidaDAO {
         return (SCHEMA.isEmpty()) ? table : (SCHEMA + "." + table);
     }
 
-    // SQL SOLO con PROY_PARTIDA (para armar el árbol de conceptos)
-    // Ya no dependemos de PROY_PARTIDA_MEZCLA para nivel ni para orden.
-    // ⬇️ IMPORTANTE: ya NO filtramos por pa.Nivel IN (1, 2) para poder traer niveles 3, 4, 5, ...
     private static final String SQL =
         "SELECT pr.IngEgr, " +
         "       pa.CodPartida, " +
         "       pa.CodPartidas, " +
         "       pa.DesPartida, " +
-        "       pr.Nivel       AS Nivel, " +   // nivel del árbol viene directo de PROY_PARTIDA
+        "       pr.Nivel       AS Nivel, " +   
         "       pa.Semilla, " +
-        "       NULL           AS Orden " +   // ya no usamos ppm.Orden; se ordena por código
+        "       NULL           AS Orden " +   
         "FROM " + T("PROY_PARTIDA") + " pr " +
         "JOIN " + T("PARTIDA") + " pa " +
         "  ON pa.CodCia     = pr.CodCia " +
@@ -127,7 +117,7 @@ public class PartidaDAOImpl implements PartidaDAO {
                     int sem = rs.getInt("Semilla");
                     dto.setSemilla(rs.wasNull() ? null : sem);
 
-                    dto.setNoProyectado(true); // 👈 CLAVE
+                    dto.setNoProyectado(true);
 
                     lista.add(dto);
                 }

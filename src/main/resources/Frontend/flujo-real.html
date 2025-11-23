@@ -10,23 +10,19 @@
     <div class="container">
         <h1>Flujo de Caja Real</h1>
         
-        <!-- agregado: muestra del proyecto seleccionado -->
+
         <div id="proyectoInfo" style="margin: 6px 0; font-weight: 600;">
-            <!-- Se llenará desde JS: "Proyecto: {nombPyto} (CodCIA|CodPyto)" -->
         </div>
 
         <div class="controls-container">
             <div class="left-controls">
-             <!-- 🆕 Selector de compañía -->
                 <select id="selectCia">
                     <option value="">Seleccione compañía</option>
                 </select>
-                <!-- Selector de proyectos -->
                 <select id="selectProyecto" disabled>
                     <option value="">Seleccione proyecto</option>
                 </select>
 
-                <!-- Selector de años del proyecto -->
                 <select id="yearSelect">
                     <option value="">Año</option>
                 </select>
@@ -41,14 +37,14 @@
             </div>
         </div>
 
-        <!-- agregado: hidden inputs para almacenar PK compuesta del proyecto -->
+
         <input type="hidden" id="codCiaHidden">
         <input type="hidden" id="codPytoHidden">
 
-        <!-- agregado: contenedor simple para mensajes/errores (opcional para JS) -->
+
         <div id="statusMsg" aria-live="polite"></div>
 
-        <!-- Contenedor con scroll -->
+
         <div class="table-container" style="overflow-x: auto;">
             <table id="tablaFlujo">
                 <thead>
@@ -72,18 +68,14 @@
                     </tr>
                 </thead>
                 <tbody id="bodyRows">
-                    <!-- Filas base iniciales -->
-                    <!-- MOD: agregué id="rowIngresos" para insertar conceptos de ingresos debajo -->
                     <tr class="separator-row" id="rowIngresos">
                         <td class="separator-cell">INGRESOS</td>
                         <td colspan="15"></td>
                     </tr>
-                    <!-- MOD: agregué id="rowEgresos" para insertar conceptos de egresos debajo -->
                     <tr class="separator-row" id="rowEgresos">
                         <td class="separator-cell">EGRESOS</td>
                         <td colspan="15"></td>
                     </tr>
-                    <!-- MOD (opcional): id="rowNeto" por si luego calculamos el neto -->
                     <tr class="separator-row separator-neto" id="rowNeto">
                         <td class="separator-cell">FLUJO DE CAJA NETO</td>
                         <td colspan="15"></td>
@@ -96,13 +88,9 @@
         <button class="concepto-btn btn-off" id="btnProyectos">Proyectos</button>
         <button class="concepto-btn" id="btnConcepto">Concepto</button>
         <button class="concepto-btn" id="btnValores">Cargar flujo de caja</button>
-        <!-- 🆕 BOTÓN PARA UN SOLO MES -->
         <button class="concepto-btn" id="btnCargarMes" type="button">Cargar mes</button>
-        <!-- 🆕 BOTÓN REFACTORIZAR MES -->
         <button class="concepto-btn" id="btnRefactorizar" type="button">Refactorizar mes</button>
-        <!-- 🆕 BOTÓN GUARDAR SOLO EL AÑO VISIBLE -->
         <button class="concepto-btn" id="btnGuardar" type="button">Guardar</button>
-        <!-- Ya existente: guarda todos los años -->
         <button class="concepto-btn" id="btnInicio" type="button">Inicio</button>
     </div>
 

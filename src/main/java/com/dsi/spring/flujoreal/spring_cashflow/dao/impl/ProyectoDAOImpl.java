@@ -1,4 +1,3 @@
-// dao/impl/ProyectoDAOImpl.java
 package com.dsi.spring.flujoreal.spring_cashflow.dao.impl;
 
 import java.sql.Connection;
@@ -65,7 +64,6 @@ public List<ProyectoDetalleDTO> listarProyectosPorCia(int codCia) throws Excepti
             while (rs.next()) {
                 ProyectoDetalleDTO p = new ProyectoDetalleDTO();
 
-                // 🔥 IMPORTANTE: ahora sí seteamos CodCia
                 p.setCodCia(rs.getInt("CodCia"));
 
                 p.setCodPyto(rs.getInt("CodPyto"));

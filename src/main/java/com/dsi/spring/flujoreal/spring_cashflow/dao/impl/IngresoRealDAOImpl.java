@@ -12,7 +12,6 @@ import com.dsi.spring.flujoreal.spring_cashflow.dao.IngresoRealDAO;
 
 public class IngresoRealDAOImpl implements IngresoRealDAO {
 
-    // Lógica mejorada: Agregación Multi-Nivel (L3->L2, L3->L1, L2->L1)
     private static final String SQL_MESES = """
         -- PARTE 1: Valores directos
         SELECT d.CodPartida,
@@ -106,7 +105,6 @@ public class IngresoRealDAOImpl implements IngresoRealDAO {
                         m[i] = rs.getBigDecimal(i + 2);
                     }
 
-                    // --- CORRECCIÓN: ACUMULAR EN LUGAR DE SOBREESCRIBIR ---
                     if (out.containsKey(cod)) {
                         BigDecimal[] existing = out.get(cod);
                         for (int i = 0; i < 12; i++) {
@@ -115,7 +113,6 @@ public class IngresoRealDAOImpl implements IngresoRealDAO {
                     } else {
                         out.put(cod, m);
                     }
-                    // -------------------------------------------------------
                 }
             }
         }
@@ -136,7 +133,6 @@ public class IngresoRealDAOImpl implements IngresoRealDAO {
                     int cod = rs.getInt("CodPartida");
                     BigDecimal val = rs.getBigDecimal("acum");
 
-                    // --- CORRECCIÓN: ACUMULAR EN LUGAR DE SOBREESCRIBIR ---
                     if (out.containsKey(cod)) {
                         out.put(cod, out.get(cod).add(val));
                     } else {
