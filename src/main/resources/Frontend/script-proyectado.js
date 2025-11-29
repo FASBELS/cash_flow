@@ -318,6 +318,23 @@ function crearFilaPartidaProy(partida) {
   tr.dataset.nivel = String(nivel);
   tr.dataset.esHoja = esHoja ? "1" : "0";
 
+    // 👇 NUEVO: clases de color por nivel/tipo
+  if (nivel === 1) {
+    if (partida.ingEgr === "I") {
+      tr.classList.add("nivel1-ingresos");
+    } else if (partida.ingEgr === "E") {
+      tr.classList.add("nivel1-egresos");
+    }
+  } else if (nivel === 2) {
+    if (partida.ingEgr === "I") {
+      tr.classList.add("nivel2-ingresos");
+    } else if (partida.ingEgr === "E") {
+      tr.classList.add("nivel2-egresos");
+    }
+  }
+  // nivel 3 se queda sin clase → fondo blanco
+
+
   const tdConcepto = document.createElement("td");
   tdConcepto.textContent = partida.desPartida;
   tdConcepto.dataset.codPartida = partida.codPartida;
@@ -550,12 +567,14 @@ async function cargarValoresProyectadosDesdeBackend(anio, pintarEnTabla = true) 
 
     const valores = [];
 
+    // 12 meses
     for (let i = 0; i < 12; i++) {
       const v = f.valores?.mes?.[i] ?? 0;
       const num = typeof v === "number" ? v : parseFloat(v);
       valores.push(isNaN(num) ? 0 : num);
     }
 
+    // suma, acumAnt, total
     const suma    = f.valores?.suma    ?? 0;
     const acumAnt = f.valores?.acumAnt ?? 0;
     const total   = f.valores?.total   ?? 0;
@@ -573,14 +592,18 @@ async function cargarValoresProyectadosDesdeBackend(anio, pintarEnTabla = true) 
     });
   });
 
+  // Guardamos en cache
   cacheValoresProyPorAnno[anio] = filasCache;
 
+  // Solo cachear, sin pintar
   if (!pintarEnTabla) {
     return;
   }
 
+  // Limpiar los valores actuales antes de pintar
   limpiarValoresTablaProy();
 
+  // Pintar meses, suma, acumAnt, total de cada fila que viene de BD
   filasCache.forEach(reg => {
     const selector = `tr.data-row-proy[data-ing-egr="${reg.ingEgr}"] td.concepto-column[data-cod-partida="${reg.codPartida}"]`;
     const cell = tbody.querySelector(selector);
@@ -589,16 +612,19 @@ async function cargarValoresProyectadosDesdeBackend(anio, pintarEnTabla = true) 
     const tr = cell.parentElement;
     const tds = tr.querySelectorAll("td");
 
-
+    // Meses
     for (let i = 0; i < 12; i++) {
       tds[i + 1].textContent = formatNumber(reg.valores[i] || 0);
     }
 
+    // Suma / Acum. Ant. / Total (por si el backend ya los trae)
     tds[13].textContent = formatNumber(reg.valores[12] || 0);
     tds[14].textContent = formatNumber(reg.valores[13] || 0);
     tds[15].textContent = formatNumber(reg.valores[14] || 0);
   });
 
+  // 👇👇 NUEVO: recalcular jerarquía y neto con los valores cargados
+  recalcularTodaJerarquiaProy();
   recalcularFilaNetoProy();
 
   setStatusProy(`Datos proyectados cargados desde BD para ${anio}.`);
@@ -669,34 +695,41 @@ function restaurarTablaProyDesdeCache(anio) {
 
   const filas = cacheValoresProyPorAnno[anio];
 
-  if (!filas) {
-    const celdas = tbody.querySelectorAll("tr.data-row-proy td:not(.concepto-column)");
-    celdas.forEach(td => {
-      td.textContent = formatNumber(0);
-    });
-
+  // Si no hay cache o está vacío → tabla en cero, jerarquía y neto recalculados
+  if (!filas || !filas.length) {
+    limpiarValoresTablaProy();
+    recalcularTodaJerarquiaProy();
     recalcularFilaNetoProy();
     return;
   }
 
+  // Empezar SIEMPRE desde cero para no arrastrar datos del año anterior
+  limpiarValoresTablaProy();
+
   filas.forEach(f => {
-    const selector = `tr.data-row-proy[data-ing-egr="${f.ingEgr}"] td.concepto-column[data-cod-partida="${f.codPartida}"]`;
+    const selector =
+      `tr.data-row-proy[data-ing-egr="${f.ingEgr}"] td.concepto-column[data-cod-partida="${f.codPartida}"]`;
     const conceptCell = tbody.querySelector(selector);
     if (!conceptCell) return;
 
     const tr = conceptCell.parentElement;
     const tds = tr.querySelectorAll("td");
 
+    // valores[0..14] => 12 meses + suma + acumAnt + total
     f.valores.forEach((v, idx) => {
-      const pos = idx + 1; 
+      const pos = idx + 1; // td[0] es el concepto
       if (pos < tds.length) {
         tds[pos].textContent = formatNumber(v);
       }
     });
   });
 
+  // Recalcular padres (niveles 1 y 2) a partir de los hijos del año actual
+  recalcularTodaJerarquiaProy();
+  // Y el neto proyectado
   recalcularFilaNetoProy();
 }
+
 // Construye las filas DTO para un año usando el cacheValoresProyPorAnno
 function construirFilasParaAnnoProyDesdeCache(anio) {
   const filasCache = cacheValoresProyPorAnno[anio];
@@ -799,6 +832,25 @@ function sumarHijosEnPadreProy(padre, filas, idxPadre) {
   if (tdAcum) tdAcum.textContent = formatNumber(acumAnt);
   if (tdTotal) tdTotal.textContent = formatNumber(suma + acumAnt);
 }
+
+
+function recalcularTodaJerarquiaProy() {
+  const tbody = document.getElementById("bodyRowsProy");
+  if (!tbody) return;
+
+  const filas = Array.from(tbody.querySelectorAll("tr.data-row-proy"));
+
+  // Vamos de abajo hacia arriba
+  for (let i = filas.length - 1; i >= 0; i--) {
+    const tr = filas[i];
+    // Solo disparo el recalculo partiendo de las hojas
+    if (tr.dataset.esHoja === "1") {
+      recalcularPadresDesdeFilaProy(tr);
+    }
+  }
+}
+
+
 
 function recalcularFilaNetoProy() {
   const tbody = document.getElementById("bodyRowsProy");
@@ -1043,7 +1095,7 @@ function setupEventListenersProy() {
     setStatusProy("Proyecto seleccionado. Cargue conceptos y luego active Valores.");
   });
 
-// CAMBIO DE AÑO CON CACHE
+/// CAMBIO DE AÑO CON CACHE
 if (yearSelect) {
   yearSelect.addEventListener("change", (e) => {
     if (!proyectoSeleccionadoProy) return;
@@ -1051,6 +1103,7 @@ if (yearSelect) {
     const nuevoAnno = parseInt(e.target.value, 10);
     if (!nuevoAnno) return;
 
+    // Guardamos el año actual en cache antes de cambiar
     if (annoSeleccionadoProy != null) {
       cachearTablaProyParaAnno(annoSeleccionadoProy);
     }
@@ -1063,19 +1116,31 @@ if (yearSelect) {
     const tbody = document.getElementById("bodyRowsProy");
     if (!tbody) return;
 
-    if (cacheValoresProyPorAnno[nuevoAnno]) {
+    const tieneCache = Object.prototype.hasOwnProperty.call(
+      cacheValoresProyPorAnno,
+      nuevoAnno
+    );
+
+    if (tieneCache) {
+      // Siempre restaurar usando la función que limpia y recalcula
       restaurarTablaProyDesdeCache(nuevoAnno);
     } else {
+      // Año sin datos todavía → todo en cero
       limpiarValoresTablaProy();
+      recalcularTodaJerarquiaProy();
+      recalcularFilaNetoProy();
     }
 
-    if (cacheValoresProyPorAnno[nuevoAnno - 1]) {
+    // Copiar acumulado anterior sólo si el año previo tiene cache
+    if (Object.prototype.hasOwnProperty.call(cacheValoresProyPorAnno, nuevoAnno - 1)) {
       copiarAcumuladoAnteriorDesdeAnno(nuevoAnno - 1, nuevoAnno);
       cachearTablaProyParaAnno(nuevoAnno);
+      // Vuelve a recalcular neto después de tocar el acumulado
+      recalcularFilaNetoProy();
     }
-    recalcularFilaNetoProy();
   });
 }
+
 
 
   // BOTÓN CONCEPTO
