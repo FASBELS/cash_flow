@@ -471,7 +471,37 @@ input[type="number"]:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.14);
 }
+/* ---------- REAL - COLORES POR NIVEL ---------- */
 
+
+.real-body #tablaFlujo tr.data-row[data-nivel="1"][data-ing-egr="I"] > td {
+  background-color: #146c43 !important; /* verde oscuro */
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+.real-body #tablaFlujo tr.data-row[data-nivel="2"][data-ing-egr="I"] > td {
+  background-color: #d1e7dd !important; /* verde claro */
+  color: #0f5132 !important;
+}
+
+.real-body #tablaFlujo tr.data-row[data-nivel="1"][data-ing-egr="E"] > td {
+  background-color: #b02a37 !important; /* rojo oscuro */
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+.real-body #tablaFlujo tr.data-row[data-nivel="2"][data-ing-egr="E"] > td {
+  background-color: #f8d7da !important; /* rojo claro */
+  color: #842029 !important;
+}
+
+
+/* NIVEL 3 (todos están fijos, NO editables) */
+.real-body #tablaFlujo tr.data-row[data-nivel="3"] td:not(.concepto-column) {
+  background-color: #f3f4f6 !important;  /* gris suave */
+  color: #000000 !important;
+}
 /* Botones inferiores */
 
 .real-body .buttons-container {

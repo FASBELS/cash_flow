@@ -343,6 +343,109 @@ async function asegurarValoresParaAnno(anno) {
   valoresRealesPorAnno[anno] = data;
 }
 
+function calcularSumasJerarquicas() {
+  const tbody = document.getElementById("bodyRows");
+  if (!tbody) return;
+
+  // Procesar de nivel 3 hacia arriba (3 -> 2 -> 1)
+  for (let nivelActual = 3; nivelActual >= 1; nivelActual--) {
+    const filasPadre = tbody.querySelectorAll(`tr.data-row[data-nivel="${nivelActual}"]`);
+    
+    for (const filaPadre of filasPadre) {
+      const codPartidaPadre = filaPadre.querySelector("td.concepto-column")?.dataset.codPartida;
+      if (!codPartidaPadre) return;
+
+      // Buscar todas las filas hijas directas
+      const filasHijas = Array.from(tbody.querySelectorAll("tr.data-row")).filter(tr => {
+        const parentPartida = tr.dataset.parentPartida;
+        const nivel = parseInt(tr.dataset.nivel || "1", 10);
+        return parentPartida === codPartidaPadre && nivel === nivelActual + 1;
+      });
+
+      // Si no tiene hijos, es una hoja (nivel 3), no calculamos nada
+      if (filasHijas.length === 0) continue;
+
+      // Sumar los valores de los hijos para cada mes
+      const celdasPadre = Array.from(filaPadre.querySelectorAll("td"));
+      
+      for (let mes = 1; mes <= 12; mes++) {
+        let sumaHijos = 0;
+        
+        for (const filaHija of filasHijas) {
+          const tdHijo = filaHija.querySelector(`td[data-mes="${mes}"]`);
+          if (tdHijo) {
+            const valor = parseFloat((tdHijo.textContent || "").replace(/,/g, "").trim()) || 0;
+            sumaHijos += valor;
+          }
+        };
+
+        // Actualizar el valor del padre
+        const tdPadre = filaPadre.querySelector(`td[data-mes="${mes}"]`);
+        if (tdPadre) {
+          tdPadre.textContent = formatNumber(sumaHijos);
+        }
+      }
+
+      // Recalcular Suma, Acum.Ant y Total del padre
+      recalcularFilaPartidaReal(filaPadre);
+    };
+  }
+}
+
+/**
+ * Construye un mapa de relaciones padre-hijo desde el árbol cargado
+ */
+function construirMapaPadresHijos() {
+  const mapa = {
+    ingresos: new Map(),
+    egresos: new Map()
+  };
+
+  function agregarRelaciones(lista, map) {
+    lista.forEach(nodo => {
+      if (nodo.children && nodo.children.length > 0) {
+        const hijos = nodo.children.map(h => h.codPartida);
+        map.set(nodo.codPartida, hijos);
+        
+        // Recursivamente procesar hijos
+        agregarRelaciones(nodo.children, map);
+      }
+    });
+  }
+
+  agregarRelaciones(conceptosCargados.ingresos, mapa.ingresos);
+  agregarRelaciones(conceptosCargados.egresos, mapa.egresos);
+
+  return mapa;
+}
+
+/**
+ * Asigna el parentPartida a cada fila basándose en el árbol
+ */
+function asignarParentPartidaEnDOM() {
+  const tbody = document.getElementById("bodyRows");
+  if (!tbody) return;
+
+  // Construir un mapa de codPartida -> nodo con todos los nodos aplanados
+  const todosList = [...conceptosCargados.ingresos, ...conceptosCargados.egresos];
+  
+  function procesarNodo(nodo, parentId = null) {
+    const fila = tbody.querySelector(`tr.data-row td.concepto-column[data-cod-partida="${nodo.codPartida}"]`)?.parentElement;
+    
+    if (fila && parentId) {
+      fila.dataset.parentPartida = String(parentId);
+    }
+
+    if (nodo.children && nodo.children.length > 0) {
+      nodo.children.forEach(hijo => {
+        procesarNodo(hijo, nodo.codPartida);
+      });
+    }
+  }
+
+  todosList.forEach(nodo => procesarNodo(nodo));
+}
+
 function crearFilaNodo(nodo) {
   const tr = document.createElement("tr");
   tr.classList.add("data-row");
@@ -358,7 +461,6 @@ function crearFilaNodo(nodo) {
   if (nodo.ingEgr) tr.dataset.ingEgr = nodo.ingEgr;
   if (nodo.codPartidas) tr.dataset.codPartidas = nodo.codPartidas;
   if (nodo.codPartida != null) tr.dataset.codPartida = String(nodo.codPartida);
-  if (nodo.parentId != null) tr.dataset.parentPartida = String(nodo.parentId);
 
   const tdConcepto = document.createElement("td");
   tdConcepto.classList.add("concepto-column");
@@ -822,6 +924,7 @@ async function cargarConceptos(codPyto) {
     conceptosCargados.egresos  = flattenTree(egresosRoots);
 
     renderArbolEnTabla();
+    pintarFilasReal();
     setStatus("Árbol de partidas cargado.");
 
     conceptosYaCargados  = true;
@@ -880,6 +983,8 @@ function renderArbolEnTabla() {
   }
   resetCeldasNumericas();
 
+  // Asignar relaciones padre-hijo después de renderizar
+  asignarParentPartidaEnDOM();
 }
 
 async function cargarMapaProyectado(codCia, codPyto, anno) {
@@ -1064,12 +1169,14 @@ function recalcularFilaPartidaReal(tr) {
     if (!isNaN(num)) suma += num;
   });
 
+  // Encontrar las celdas de Suma, Acum.Ant y Total
   const tdSuma  = tds.find(td => td.dataset.colIndex === "12");
   const tdAcum  = tds.find(td => td.dataset.colIndex === "13");
   const tdTotal = tds.find(td => td.dataset.colIndex === "14");
 
   if (tdSuma) tdSuma.textContent = formatNumber(suma);
 
+  // El acumulado anterior se mantiene (no lo recalculamos aquí)
   const acumAnt = tdAcum
     ? parseFloat((tdAcum.textContent || "").replace(/,/g, "").trim()) || 0
     : 0;
@@ -1078,7 +1185,6 @@ function recalcularFilaPartidaReal(tr) {
   if (tdTotal) tdTotal.textContent = formatNumber(suma + acumAnt);
 }
 
-// 🆕 Recalcular la fila "FLUJO DE CAJA NETO"
 function recalcularFilaNetoReal() {
   const tbody = document.getElementById("bodyRows");
   if (!tbody) return;
@@ -1093,7 +1199,7 @@ function recalcularFilaNetoReal() {
   const netCells = Array.from(netRow.querySelectorAll("td"));
   if (netCells.length < 16) return;
 
-  // Acumulado anterior tal como está en la columna 14 (índice 14)
+  // Acumulado anterior de la fila neto (columna 14)
   const acumAntTxt = (netCells[14].textContent || "").replace(/,/g, "").trim();
   const acumAnt = parseFloat(acumAntTxt) || 0;
 
@@ -1117,6 +1223,7 @@ function recalcularFilaNetoReal() {
       const txt = (tds[i].textContent || "").replace(/,/g, "").trim();
       const num = parseFloat(txt);
       if (isNaN(num)) continue;
+      
       if (ingEgr === "I") {
         totMes[i - 1] += num;
       } else if (ingEgr === "E") {
@@ -1218,19 +1325,19 @@ function insertarNuevaPartidaNoProyectada(item) {
 }
 
 
+
 //Aplicar al DOM los valores de UN MES (data viene del endpoint /real/mes)
 function aplicarValoresMesEnTablaReal(mes, data) {
   const tbody = document.getElementById("bodyRows");
   if (!tbody || !Array.isArray(data)) return;
 
-  // 0) Limpieza previa del mes
-  // Evita que valores antiguos se queden cuando la boleta no trae monto
-  const todasLasCeldasMes = tbody.querySelectorAll(`td[data-mes="${mes}"]`);
-  todasLasCeldasMes.forEach(td => {
+  // 0) Limpieza previa del mes SOLO para nivel 3
+  const celdasNivel3 = tbody.querySelectorAll(`tr.data-row[data-nivel="3"] td[data-mes="${mes}"]`);
+  celdasNivel3.forEach(td => {
     td.textContent = formatNumber(0);
   });
 
-  // 1) Insertar valores del backend (y crear partidas no proyectadas si existen)
+  // 1) Insertar valores del backend (partidas nivel 3 y crear no proyectadas si existen)
   data.forEach(item => {
     const codPartida = item.codPartida;
     if (!codPartida) return;
@@ -1261,16 +1368,19 @@ function aplicarValoresMesEnTablaReal(mes, data) {
     tdMes.textContent = formatNumber(monto);
   });
 
-  // 2) Recalcular todas las filas
-  const filas = tbody.querySelectorAll("tr.data-row");
-  filas.forEach(tr => recalcularFilaPartidaReal(tr));
+  // 2) Asegurar que las relaciones padre-hijo estén en el DOM
+  asignarParentPartidaEnDOM();
 
-  // 3) Recalcular NETO general
+  // 3) Calcular sumas jerárquicas (nivel 3 -> 2 -> 1)
+  calcularSumasJerarquicas();
+
+  // 4) Recalcular todas las columnas agregadas (Suma, Acum.Ant, Total)
+  const todasLasFilas = tbody.querySelectorAll("tr.data-row");
+  todasLasFilas.forEach(tr => recalcularFilaPartidaReal(tr));
+
+  // 5) Recalcular FLUJO DE CAJA NETO
   recalcularFilaNetoReal();
 }
-
-
-
 
 function formatNumber(n) {
   const num = Number(n ?? 0);
@@ -1366,6 +1476,25 @@ function construirFilasParaAnno(anio) {
   });
 
   return filas;
+}
+
+function pintarFilasReal() {
+  const filas = document.querySelectorAll("#tablaFlujo tr.data-row");
+
+  filas.forEach(fila => {
+    const nivel = fila.dataset.nivel;    // "1", "2" o "3"
+    const tipo  = fila.dataset.ingegr;   // "I" o "E"
+
+    if (tipo === "I") {
+      if (nivel === "1") fila.classList.add("nivel1-ingresos");
+      if (nivel === "2") fila.classList.add("nivel2-ingresos");
+    }
+
+    if (tipo === "E") {
+      if (nivel === "1") fila.classList.add("nivel1-egresos");
+      if (nivel === "2") fila.classList.add("nivel2-egresos");
+    }
+  });
 }
 
 // arma las filas para un año dado consultando directamente al backend
