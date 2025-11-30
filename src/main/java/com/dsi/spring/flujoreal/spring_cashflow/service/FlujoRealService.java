@@ -22,6 +22,7 @@ import com.dsi.spring.flujoreal.spring_cashflow.dto.FilaFlujoDTO;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.FlujoCajaDetSaveDTO;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.MonthValues;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.RealMesDTO;
+import com.dsi.spring.flujoreal.spring_cashflow.dto.RegistroMesRealDTO;   // 👈 NUEVO
 import com.dsi.spring.flujoreal.spring_cashflow.utils.PartidaHierarchyResolver;
 
 @Service
@@ -243,5 +244,29 @@ public class FlujoRealService {
         }
 
         return resultado;
+    }
+
+     // 7) Guardar SOLO un mes (nivel 3) - usado por "Refactorizar mes"
+    public void guardarMesReal(List<RegistroMesRealDTO> filas) throws Exception {
+        if (filas == null || filas.isEmpty()) {
+            return;
+        }
+
+        // (Opcional) Validaciones básicas: mismo año / mes / proyecto
+        RegistroMesRealDTO first = filas.get(0);
+        int anno = first.getAnno();
+        int mes  = first.getMes();
+        int codCia  = first.getCodCia();
+        int codPyto = first.getCodPyto();
+
+        for (RegistroMesRealDTO f : filas) {
+            if (f.getAnno() != anno || f.getMes() != mes ||
+                f.getCodCia() != codCia || f.getCodPyto() != codPyto) {
+                throw new IllegalArgumentException("Todas las filas deben pertenecer al mismo año, mes, compañía y proyecto.");
+            }
+        }
+
+        // Delegamos la lógica de UPDATE/INSERT por mes al DAO
+        flujoRealDAO.guardarMesReal(filas);
     }
 }

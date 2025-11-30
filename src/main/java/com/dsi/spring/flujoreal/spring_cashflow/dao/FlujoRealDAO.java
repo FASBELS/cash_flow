@@ -5,6 +5,7 @@ import java.util.Map;
 
 import com.dsi.spring.flujoreal.spring_cashflow.dto.DetValoresDTO;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.FilaFlujoDTO;
+import com.dsi.spring.flujoreal.spring_cashflow.dto.RegistroMesRealDTO;
 
 public interface FlujoRealDAO {
 
@@ -13,4 +14,6 @@ public interface FlujoRealDAO {
     List<FilaFlujoDTO> conceptosProyecto(int codCia, int codPyto) throws Exception;
 
     FilaFlujoDTO obtenerInfoPartida(int codCia, int codPartida) throws Exception;
+
+    void guardarMesReal(List<RegistroMesRealDTO> filas) throws Exception;
 }

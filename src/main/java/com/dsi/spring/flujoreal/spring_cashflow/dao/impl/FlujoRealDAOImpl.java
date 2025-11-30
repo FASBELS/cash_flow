@@ -15,6 +15,7 @@ import com.dsi.spring.flujoreal.spring_cashflow.dao.FlujoRealDAO;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.DetValoresDTO;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.FilaFlujoDTO;
 import com.dsi.spring.flujoreal.spring_cashflow.dto.MonthValues;
+import com.dsi.spring.flujoreal.spring_cashflow.dto.RegistroMesRealDTO;
 
 public class FlujoRealDAOImpl implements FlujoRealDAO {
 
@@ -141,4 +142,133 @@ public class FlujoRealDAOImpl implements FlujoRealDAO {
 
         return null;
     }
+
+@Override
+    public void guardarMesReal(List<RegistroMesRealDTO> filas) throws Exception {
+        if (filas == null || filas.isEmpty()) {
+            return;
+        }
+
+        RegistroMesRealDTO first = filas.get(0);
+
+        final int codCia  = first.getCodCia();
+        final int codPyto = first.getCodPyto();
+        final int anno    = first.getAnno();
+        final int mes     = first.getMes();
+
+        // Validación básica: mismo contexto para todas las filas
+        for (RegistroMesRealDTO f : filas) {
+            if (f.getCodCia() != codCia ||
+                f.getCodPyto() != codPyto ||
+                f.getAnno() != anno ||
+                f.getMes() != mes) {
+
+                throw new IllegalArgumentException(
+                    "Todas las filas deben ser del mismo codCia, codPyto, año y mes."
+                );
+            }
+        }
+
+        // Determinar la columna a actualizar según el mes
+        final String colMes;
+        switch (mes) {
+            case 1:  colMes = "ImpRealEne"; break;
+            case 2:  colMes = "ImpRealFeb"; break;
+            case 3:  colMes = "ImpRealMar"; break;
+            case 4:  colMes = "ImpRealAbr"; break;
+            case 5:  colMes = "ImpRealMay"; break;
+            case 6:  colMes = "ImpRealJun"; break;
+            case 7:  colMes = "ImpRealJul"; break;
+            case 8:  colMes = "ImpRealAgo"; break;
+            case 9:  colMes = "ImpRealSep"; break;
+            case 10: colMes = "ImpRealOct"; break;
+            case 11: colMes = "ImpRealNov"; break;
+            case 12: colMes = "ImpRealDic"; break;
+            default:
+                throw new IllegalArgumentException("Mes inválido: " + mes);
+        }
+
+        String sqlClear = "UPDATE FLUJOCAJA_DET " +
+                "SET " + colMes + " = 0 " +
+                "WHERE CodCIA = ? AND CodPyto = ? AND Anno = ? AND Tipo = 'R'";
+
+        String sqlUpdate =
+                "UPDATE FLUJOCAJA_DET " +
+                "   SET " + colMes + " = ? " +
+                " WHERE CodCIA = ? AND CodPyto = ? AND Anno = ? " +
+                "   AND IngEgr = ? AND Tipo = ? AND CodPartida = ?";
+
+        String sqlInsert =
+                "INSERT INTO FLUJOCAJA_DET (" +
+                " CodCIA, CodPyto, Anno, IngEgr, Tipo, CodPartida, Orden, " +
+                " ImpRealIni, ImpRealAcum, " +
+                " ImpRealEne, ImpRealFeb, ImpRealMar, ImpRealAbr, ImpRealMay, ImpRealJun, " +
+                " ImpRealJul, ImpRealAgo, ImpRealSep, ImpRealOct, ImpRealNov, ImpRealDic" +
+                ") VALUES (" +
+                " ?, ?, ?, ?, ?, ?, ?, " +  // claves + orden
+                " 0, 0, " +                  // ImpRealIni, ImpRealAcum
+                " ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?" + // 12 meses
+                ")";
+
+        try (Connection cn = DBConnection.getInstance().getConnection()) {
+            cn.setAutoCommit(false);
+
+            // 1️⃣ Poner en 0 ese mes SOLO para ese proyecto/año/tipo R
+            try (PreparedStatement psClear = cn.prepareStatement(sqlClear)) {
+                psClear.setInt(1, codCia);
+                psClear.setInt(2, codPyto);
+                psClear.setInt(3, anno);
+                psClear.executeUpdate();
+            }
+
+            // 2️⃣ Para cada partida de nivel 3: UPDATE, y si no existe -> INSERT
+            try (PreparedStatement psUpdate = cn.prepareStatement(sqlUpdate);
+                 PreparedStatement psInsert = cn.prepareStatement(sqlInsert)) {
+
+                for (RegistroMesRealDTO f : filas) {
+                    // UPDATE primero
+                    psUpdate.setBigDecimal(1, f.getMonto());
+                    psUpdate.setInt(2, f.getCodCia());
+                    psUpdate.setInt(3, f.getCodPyto());
+                    psUpdate.setInt(4, f.getAnno());
+                    psUpdate.setString(5, f.getIngEgr());
+                    psUpdate.setString(6, f.getTipo());
+                    psUpdate.setInt(7, f.getCodPartida());
+
+                    int updated = psUpdate.executeUpdate();
+                    if (updated == 0) {
+                        // INSERT si no existía
+                        int idx = 1;
+                        psInsert.setInt(idx++, f.getCodCia());
+                        psInsert.setInt(idx++, f.getCodPyto());
+                        psInsert.setInt(idx++, f.getAnno());
+                        psInsert.setString(idx++, f.getIngEgr());
+                        psInsert.setString(idx++, f.getTipo());
+                        psInsert.setInt(idx++, f.getCodPartida());
+                        psInsert.setInt(idx++, f.getOrden());
+
+                        // ImpRealIni, ImpRealAcum -> 0 (ya puestos en el SQL)
+                        // Asignar los 12 meses: sólo el mes pedido con monto, resto 0
+                        for (int m = 1; m <= 12; m++) {
+                            if (m == mes) {
+                                psInsert.setBigDecimal(idx++, f.getMonto());
+                            } else {
+                                psInsert.setBigDecimal(idx++, BigDecimal.ZERO);
+                            }
+                        }
+
+                        psInsert.executeUpdate();
+                    }
+                }
+            }
+
+            cn.commit();
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new Exception("Error al guardar mes real: " + ex.getMessage(), ex);
+        }
+    }
+
+
+
 }

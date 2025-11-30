@@ -4,6 +4,7 @@ let proyectos = [];
 let conceptosCargados = { ingresos: [], egresos: [] };
 let proyectoSeleccionado = null;
 let annoSeleccionado = null;
+let valoresDesdeBoletas = false;
 
 let mapaProyectado = {};
 let comparacionActiva = false; 
@@ -349,46 +350,72 @@ function calcularSumasJerarquicas() {
 
   // Procesar de nivel 3 hacia arriba (3 -> 2 -> 1)
   for (let nivelActual = 3; nivelActual >= 1; nivelActual--) {
-    const filasPadre = tbody.querySelectorAll(`tr.data-row[data-nivel="${nivelActual}"]`);
+    const filasPadre = tbody.querySelectorAll(
+      `tr.data-row[data-nivel="${nivelActual}"]`
+    );
     
     for (const filaPadre of filasPadre) {
-      const codPartidaPadre = filaPadre.querySelector("td.concepto-column")?.dataset.codPartida;
+      const codPartidaPadre = filaPadre
+        .querySelector("td.concepto-column")
+        ?.dataset.codPartida;
       if (!codPartidaPadre) return;
 
-      // Buscar todas las filas hijas directas
-      const filasHijas = Array.from(tbody.querySelectorAll("tr.data-row")).filter(tr => {
+      // Buscar todas las filas hijas directas de este padre
+      const filasHijas = Array.from(
+        tbody.querySelectorAll("tr.data-row")
+      ).filter(tr => {
         const parentPartida = tr.dataset.parentPartida;
         const nivel = parseInt(tr.dataset.nivel || "1", 10);
         return parentPartida === codPartidaPadre && nivel === nivelActual + 1;
       });
 
-      // Si no tiene hijos, es una hoja (nivel 3), no calculamos nada
+      // Si no tiene hijos, es hoja: no calculamos nada
       if (filasHijas.length === 0) continue;
 
-      // Sumar los valores de los hijos para cada mes
-      const celdasPadre = Array.from(filaPadre.querySelectorAll("td"));
-      
+      // 1) Sumar los valores de los hijos para cada mes
       for (let mes = 1; mes <= 12; mes++) {
         let sumaHijos = 0;
         
         for (const filaHija of filasHijas) {
           const tdHijo = filaHija.querySelector(`td[data-mes="${mes}"]`);
           if (tdHijo) {
-            const valor = parseFloat((tdHijo.textContent || "").replace(/,/g, "").trim()) || 0;
+            const valor = parseFloat(
+              (tdHijo.textContent || "").replace(/,/g, "").trim()
+            ) || 0;
             sumaHijos += valor;
           }
-        };
+        }
 
-        // Actualizar el valor del padre
+        // Actualizar el valor del padre en ese mes
         const tdPadre = filaPadre.querySelector(`td[data-mes="${mes}"]`);
         if (tdPadre) {
           tdPadre.textContent = formatNumber(sumaHijos);
         }
       }
 
-      // Recalcular Suma, Acum.Ant y Total del padre
+      // 2) Sumar ACUM. ANT. de los hijos y ponerlo en el padre
+      let acumAntPadre = 0;
+      for (const filaHija of filasHijas) {
+        const tdsHija = Array.from(filaHija.querySelectorAll("td"));
+        const tdAcumHija = tdsHija.find(td => td.dataset.colIndex === "13");
+        if (tdAcumHija) {
+          const valAcumHija = parseFloat(
+            (tdAcumHija.textContent || "").replace(/,/g, "").trim()
+          ) || 0;
+          acumAntPadre += valAcumHija;
+        }
+      }
+
+      const tdsPadre = Array.from(filaPadre.querySelectorAll("td"));
+      const tdAcumPadre = tdsPadre.find(td => td.dataset.colIndex === "13");
+      if (tdAcumPadre) {
+        tdAcumPadre.textContent = formatNumber(acumAntPadre);
+      }
+
+      // 3) Recalcular Suma y Total del padre
+      //    (usa los meses y el Acum.Ant. que acabamos de setear)
       recalcularFilaPartidaReal(filaPadre);
-    };
+    }
   }
 }
 
@@ -426,12 +453,17 @@ function asignarParentPartidaEnDOM() {
   const tbody = document.getElementById("bodyRows");
   if (!tbody) return;
 
-  // Construir un mapa de codPartida -> nodo con todos los nodos aplanados
-  const todosList = [...conceptosCargados.ingresos, ...conceptosCargados.egresos];
-  
+  // 1) Intento principal: usar el árbol (children) que viene del backend
+  const todosList = [
+    ...conceptosCargados.ingresos,
+    ...conceptosCargados.egresos
+  ];
+
   function procesarNodo(nodo, parentId = null) {
-    const fila = tbody.querySelector(`tr.data-row td.concepto-column[data-cod-partida="${nodo.codPartida}"]`)?.parentElement;
-    
+    const fila = tbody.querySelector(
+      `tr.data-row td.concepto-column[data-cod-partida="${nodo.codPartida}"]`
+    )?.parentElement;
+
     if (fila && parentId) {
       fila.dataset.parentPartida = String(parentId);
     }
@@ -444,6 +476,34 @@ function asignarParentPartidaEnDOM() {
   }
 
   todosList.forEach(nodo => procesarNodo(nodo));
+
+  // 2) Fallback: para cualquier fila sin parentPartida,
+  //    usamos la jerarquía visual (nivel) para deducir el padre.
+  const filas = Array.from(tbody.querySelectorAll("tr.data-row"));
+  const stack = []; // [{ nivel, codPartida }]
+
+  filas.forEach(tr => {
+    const nivel = parseInt(tr.dataset.nivel || "1", 10);
+    const codPartida =
+      tr.dataset.codPartida ||
+      tr.querySelector("td.concepto-column")?.dataset.codPartida;
+
+    if (!codPartida) return;
+
+    // Quitamos del stack los niveles >= al actual
+    while (stack.length && stack[stack.length - 1].nivel >= nivel) {
+      stack.pop();
+    }
+
+    // Si esta fila no tiene padre asignado y hay algo en el stack,
+    // el padre es la última fila con nivel inmediatamente superior.
+    if (!tr.dataset.parentPartida && stack.length) {
+      tr.dataset.parentPartida = String(stack[stack.length - 1].codPartida);
+    }
+
+    // Apilamos esta fila para ser posible padre de las siguientes
+    stack.push({ nivel, codPartida });
+  });
 }
 
 function crearFilaNodo(nodo) {
@@ -530,6 +590,11 @@ async function aplicarValoresDesdeCache(anno) {
     const tbody = document.getElementById("bodyRows");
     if (!tbody) return;
 
+    // 🟢 NUEVO: si los valores vienen de "Cargar todas las boletas",
+    // recalculamos los acumulados anteriores en el cache antes de pintar.
+    if (valoresDesdeBoletas && proyectoSeleccionado) {
+        recalcularAcumuladosAnterioresEnCache(anno);
+    }
 
     resetCeldasNumericas();
     resetComparacionVisual();
@@ -541,12 +606,15 @@ async function aplicarValoresDesdeCache(anno) {
         fila.style.display = 'none'; 
     });
 
+    // 1) Asegurar que existan las filas para cada partida proyectada
     data.forEach(nodo => {
         if (nodo.ingEgr === 'N' || nodo.codPartida === 0) return; 
 
         filasProyectadasEsteAnno.add(String(nodo.codPartida)); 
 
-        const filaExistente = tbody.querySelector(`tr > td[data-cod-partida="${nodo.codPartida}"]`);
+        const filaExistente = tbody.querySelector(
+          `tr > td[data-cod-partida="${nodo.codPartida}"]`
+        );
         
         if (!filaExistente) {
             console.log("Creando fila faltante para:", nodo.desPartida);
@@ -565,6 +633,7 @@ async function aplicarValoresDesdeCache(anno) {
         }
     });
 
+    // 2) Pintar valores de partidas y neto desde el cache
     data.forEach(row => {
         if (row.ingEgr === "N") {
             pintarFilaNeto(row.valores);
@@ -572,7 +641,23 @@ async function aplicarValoresDesdeCache(anno) {
             pintarFilaPartidaValores(row.codPartida, row.valores);
         }
     });
+
+    // 3) Recalcular sumas de nivel 3 → 2 → 1 y el neto
+
+    // Asignar relaciones padre-hijo en el DOM (usa el árbol de conceptos)
+    asignarParentPartidaEnDOM();
+
+    // Calcular sumas jerárquicas (niveles superiores a partir de nivel 3)
+    calcularSumasJerarquicas();
+
+    // Recalcular Suma / Acum.Ant / Total de todas las filas de partidas
+    const todasLasFilas = tbody.querySelectorAll("tr.data-row");
+    todasLasFilas.forEach(tr => recalcularFilaPartidaReal(tr));
+
+    // Recalcular FLUJO DE CAJA NETO (fila inferior) usando los niveles 1
+    recalcularFilaNetoReal();
 }
+
 
 function setupEventListeners() {
   const selectProyecto = document.getElementById("selectProyecto");
@@ -822,6 +907,10 @@ function setupEventListeners() {
 if (btnRefactorizar) {
   btnRefactorizar.addEventListener("click", refactorizarMesReal);
 }
+  const btnCargarTodasBoletas = document.getElementById("btnCargarTodasBoletas");
+  if (btnCargarTodasBoletas) {
+    btnCargarTodasBoletas.addEventListener("click", cargarTodasLasBoletas);
+  }
 
   // Botón Guardar
   const btnGuardar = document.getElementById("btnGuardar");
@@ -1253,6 +1342,17 @@ function buscarNodoEnArbol(lista, codPartida) {
   }
   return null;
 }
+function inferIngEgr(codPartida) {
+  const cod = Number(codPartida);
+
+  if (conceptosCargados.ingresos.some(n => Number(n.codPartida) === cod)) {
+    return "I";
+  }
+  if (conceptosCargados.egresos.some(n => Number(n.codPartida) === cod)) {
+    return "E";
+  }
+  return "";
+}
 
 function insertarNuevaPartidaNoProyectada(item) {
   const {
@@ -1381,6 +1481,59 @@ function aplicarValoresMesEnTablaReal(mes, data) {
   // 5) Recalcular FLUJO DE CAJA NETO
   recalcularFilaNetoReal();
 }
+function recalcularAcumuladosAnterioresEnCache(annoActual) {
+  if (!proyectoSeleccionado) return;
+
+  const { annoIni } = proyectoSeleccionado;
+  const desde = annoIni || annoActual;
+  const hasta = annoActual - 1;
+
+  if (hasta < desde) return; // no hay años anteriores
+
+  const mapaPrev = new Map(); // codPartida -> total acumulado años previos
+  let totalPrevNeto = 0;      // acumulado para la fila neto (codPartida 0)
+
+  for (let anio = desde; anio <= hasta; anio++) {
+    const dataPrev = valoresRealesPorAnno[anio];
+    if (!dataPrev) continue;
+
+    dataPrev.forEach(row => {
+      if (!row || !row.valores) return;
+
+      const sumaFila = Number(
+        (row.valores.total ?? row.valores.suma ?? 0)
+      );
+
+      if (row.ingEgr === "N" || row.codPartida === 0) {
+        // fila neto
+        totalPrevNeto += sumaFila;
+      } else {
+        const key = String(row.codPartida);
+        mapaPrev.set(key, (mapaPrev.get(key) || 0) + sumaFila);
+      }
+    });
+  }
+
+  const dataActual = valoresRealesPorAnno[annoActual];
+  if (!dataActual) return;
+
+  dataActual.forEach(row => {
+    if (!row || !row.valores) return;
+
+    const sumaActual = Number(row.valores.suma ?? 0);
+
+    if (row.ingEgr === "N" || row.codPartida === 0) {
+      // Fila neto
+      row.valores.acumAnt = totalPrevNeto;
+      row.valores.total   = sumaActual + totalPrevNeto;
+    } else {
+      const key = String(row.codPartida);
+      const acumAnt = mapaPrev.get(key) || 0;
+      row.valores.acumAnt = acumAnt;
+      row.valores.total   = sumaActual + acumAnt;
+    }
+  });
+}
 
 function formatNumber(n) {
   const num = Number(n ?? 0);
@@ -1431,6 +1584,20 @@ function obtenerDescripcionPartida(codPartida) {
   if (!conceptCell) return `Partida ${codPartida}`;
   return conceptCell.textContent.trim();
 }
+// Devuelve el nivel (1, 2 o 3) de una partida según la fila del DOM
+function obtenerNivelPartida(codPartida) {
+  const tbody = document.getElementById("bodyRows");
+  if (!tbody) return null;
+
+  const tr = tbody.querySelector(
+    `tr.data-row td.concepto-column[data-cod-partida="${codPartida}"]`
+  )?.parentElement;
+
+  if (!tr) return null;
+
+  const nivel = parseInt(tr.dataset.nivel || "1", 10);
+  return isNaN(nivel) ? null : nivel;
+}
 
 
 // arma las filas para un año dado usando la tabla actual (año visible)
@@ -1472,6 +1639,49 @@ function construirFilasParaAnno(anio) {
       codPartida,
       orden: orden++,
       impRealMes
+    });
+  });
+
+  return filas;
+}
+// Construye las filas SOLO para un mes y SOLO nivel 3 (las que se guardan en BD)
+function construirFilasParaMes(anio, mes) {
+  const tbody = document.getElementById("bodyRows");
+  const filas = [];
+  if (!tbody || !proyectoSeleccionado) return filas;
+
+  let orden = 1;
+  const rows = tbody.querySelectorAll("tr.data-row");
+
+  rows.forEach(tr => {
+    const nivel = parseInt(tr.dataset.nivel || "1", 10);
+    // 🔹 Solo nivel 3 se guarda físicamente
+    if (nivel !== 3) return;
+
+    const first = tr.querySelector("td.concepto-column");
+    if (!first) return;
+
+    const codPartida = parseInt(first.dataset.codPartida || tr.dataset.codPartida, 10);
+    const ingEgr = tr.dataset.ingEgr || "";
+    if (!codPartida || !ingEgr) return;
+
+    const tdMes = tr.querySelector(`td[data-mes="${mes}"]`);
+    if (!tdMes) return;
+
+    const txt = (tdMes.textContent || "").replace(/,/g, "").trim();
+    const num = parseFloat(txt);
+    if (isNaN(num) || num === 0) return; // nada que guardar
+
+    filas.push({
+      anno: anio,
+      mes, // <- para que el backend sepa qué columna tocar (ImpRealEne, ImpRealFeb, etc.)
+      codCia: proyectoSeleccionado.codCia,
+      codPyto: proyectoSeleccionado.codPyto,
+      ingEgr,
+      tipo: "M",
+      codPartida,
+      orden: orden++,
+      monto: num
     });
   });
 
@@ -1551,6 +1761,50 @@ async function construirFilasParaAnnoDesdeBackend(anio) {
     console.error(`Error al construir filas desde backend para el año ${anio}:`, err);
     return [];
   }
+}
+// arma las filas para un año dado usando el CACHE valoresRealesPorAnno
+function construirFilasParaAnnoDesdeCache(anio) {
+  if (!proyectoSeleccionado) return [];
+  const data = valoresRealesPorAnno[anio];
+  if (!data || !Array.isArray(data)) return [];
+
+  const filas = [];
+  let orden = 1;
+
+  data.forEach(row => {
+    // ignorar fila de NETO
+    if (!row || row.ingEgr === "N" || row.codPartida === 0) return;
+
+    const codPartida = parseInt(row.codPartida, 10);
+    const ingEgr = row.ingEgr || "";
+    if (!codPartida || !ingEgr) return;
+
+    const meses = (row.valores && Array.isArray(row.valores.mes))
+      ? row.valores.mes
+      : [];
+
+    const impRealMes = [];
+    for (let i = 0; i < 12; i++) {
+      const v = Number(meses[i] || 0);
+      impRealMes.push(isNaN(v) ? 0 : v);
+    }
+
+    const tieneDatos = impRealMes.some(v => v !== 0);
+    if (!tieneDatos) return;
+
+    filas.push({
+      anno: anio,
+      codCia: proyectoSeleccionado.codCia,
+      codPyto: proyectoSeleccionado.codPyto,
+      ingEgr,
+      tipo: "R",
+      codPartida,
+      orden: orden++,
+      impRealMes
+    });
+  });
+
+  return filas;
 }
 
 async function cargarMesDesdeBoletas() {
@@ -1709,14 +1963,19 @@ async function refactorizarMesReal() {
     const data = await res.json();
     const cambios = [];
 
-    // Partidas que tienen boletas nuevas
+    // Partidas que tienen boletas nuevas (solo NIVEL 3)
     const nuevosCodPartida = new Set();
 
     data.forEach(item => {
       const cod = item.codPartida;
+      if (!cod) return;
+
+      const nivel = obtenerNivelPartida(cod);
+      if (nivel !== 3) return; // 👈 solo nivel 3
+
       nuevosCodPartida.add(cod);
 
-      const nuevo = Number(item.monto ?? 0);
+      const nuevo    = Number(item.monto ?? 0);
       const anterior = obtenerMontoMesTabla(cod, mes) ?? 0;
 
       if (Math.abs(nuevo - anterior) > 0.001) {
@@ -1729,12 +1988,15 @@ async function refactorizarMesReal() {
       }
     });
 
-    // Partidas que antes tenían valor y ahora desaparecerán
+    // Partidas que antes tenían valor y ahora quedarán en 0 (solo NIVEL 3)
     const tbody = document.getElementById("bodyRows");
     tbody.querySelectorAll("tr.data-row").forEach(tr => {
       const cel = tr.querySelector("td.concepto-column");
       const cod = parseInt(cel?.dataset.codPartida || 0, 10);
       if (!cod || nuevosCodPartida.has(cod)) return;
+
+      const nivel = parseInt(tr.dataset.nivel || "1", 10);
+      if (nivel !== 3) return; // solo nivel 3
 
       const anterior = obtenerMontoMesTabla(cod, mes) ?? 0;
       if (Math.abs(anterior) > 0.001) {
@@ -1746,31 +2008,41 @@ async function refactorizarMesReal() {
         });
       }
     });
+
     let msg = `Cambios detectados para ${nombreMes(mes)} ${annoSeleccionado}:\n\n`;
 
     if (cambios.length === 0) {
-      msg += "(No hay diferencias detectadas)\n\n¿Desea continuar?";
+      msg += "(No hay diferencias detectadas en partidas de nivel 3)\n\n¿Desea continuar?";
     } else {
       cambios.forEach(c => {
         msg += `• ${c.descripcion}: ${formatNumber(c.antes)} → ${formatNumber(c.despues)}\n`;
       });
-      msg += `\nEsto recalculará acumulados de los años siguientes.\n\n¿Desea continuar?`;
+      msg += `\nEsto recalculará sumas y acumulados, y actualizará la base de datos SOLO para este mes (nivel 3).\n\n¿Desea continuar?`;
     }
 
     if (!confirm(msg)) {
       setStatus("Refactorización cancelada.");
       return;
     }
+
+    // 1️⃣ Limpiar ese mes en toda la tabla
     tbody.querySelectorAll(`td[data-mes="${mes}"]`).forEach(td => {
       td.textContent = "0.00";
     });
 
+    // 2️⃣ Volver a aplicar los valores NUEVOS del backend (nivel 3) y recalcular jerarquía
     aplicarValoresMesEnTablaReal(mes, data);
 
-    await guardarTodosLosAnios();
+    // 3️⃣ Guardar SOLO ese mes en la BD (nivel 3)
+    await guardarMesReal(annoSeleccionado, mes);
 
-    alert(`Mes ${nombreMes(mes)} refactorizado correctamente.`);
+    // 4️⃣ Refrescar cache y volver a pintar el año actual desde backend
+    delete valoresRealesPorAnno[annoSeleccionado];
+    await asegurarValoresParaAnno(annoSeleccionado);
+    await aplicarValoresDesdeCache(annoSeleccionado);
+    valoresRealesActivos = true;
 
+    alert(`Mes ${nombreMes(mes)} refactorizado y guardado correctamente.`);
   } catch (err) {
     console.error(err);
     alert("Error al refactorizar mes.");
@@ -1781,6 +2053,7 @@ async function refactorizarMesReal() {
     }
   }
 }
+
 
 
 // guardar solo el año visible
@@ -1850,8 +2123,204 @@ async function guardarFlujoReal() {
     }
   }
 }
+// Guarda SOLO un mes (usa construirFilasParaMes y un endpoint específico)
+async function guardarMesReal(anno, mes) {
+  if (!proyectoSeleccionado) {
+    alert("Seleccione un proyecto primero.");
+    return;
+  }
 
+  const filas = construirFilasParaMes(anno, mes);
 
+  if (!filas.length) {
+    alert("No hay valores de nivel 3 para guardar en este mes.");
+    return;
+  }
+
+  try {
+    setStatus(`Guardando flujo real del mes ${nombreMes(mes)} ${anno}...`);
+
+    const res = await fetch(`${API_BASE}/valores/real/mes/guardar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(filas)
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(txt || `HTTP ${res.status}`);
+    }
+
+    setStatus(`Mes ${nombreMes(mes)} ${anno} guardado correctamente.`);
+  } catch (err) {
+    console.error("Error al guardar el mes real:", err);
+    setStatus("Error al guardar el mes.");
+    alert("Ocurrió un error al guardar el mes. Revisa la consola.");
+  }
+}
+
+async function cargarTodasLasBoletas() {
+  if (!proyectoSeleccionado || !annoSeleccionado) {
+    alert("Seleccione proyecto y año antes de cargar todas las boletas.");
+    return;
+  }
+
+  if (!conceptosYaCargados) {
+    alert("Primero cargue los conceptos.");
+    return;
+  }
+
+  const { codCia, codPyto, annoIni, annoFin } = proyectoSeleccionado;
+
+  const hoy        = new Date();
+  const annoActual = hoy.getFullYear();
+  const mesActual  = hoy.getMonth() + 1;
+
+  const btn = document.getElementById("btnCargarTodasBoletas");
+  const oldText = btn ? btn.textContent : "";
+
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Cargando boletas...";
+    }
+
+    valoresDesdeBoletas = true;
+    setStatus("Cargando todas las boletas para todos los años del proyecto...");
+
+    // Reiniciamos el cache (solo cuando usamos este botón)
+    valoresRealesPorAnno = {};
+
+    // Recorremos todos los años del proyecto hasta el año actual
+    const anioInicio = annoIni;
+    const anioFinReal = Math.min(annoFin, annoActual);
+
+    for (let anio = anioInicio; anio <= anioFinReal; anio++) {
+      // Mes máximo permitido para ese año
+      const maxMes = (anio < annoActual) ? 12 : mesActual;
+
+      // Mapa codPartida -> { codPartida, ingEgr, valores:{mes[12], suma, acumAnt, total} }
+      const mapaPartidas = {};
+
+      for (let mes = 1; mes <= maxMes; mes++) {
+        const url = `${API_BASE}/valores/real/mes` +
+          `?codCia=${codCia}&codPyto=${codPyto}&anno=${anio}&mes=${mes}`;
+
+        console.log(`[TODAS BOLETAS] Año ${anio}, mes ${mes}:`, url);
+
+        let data;
+        try {
+          const res = await fetch(url, { mode: "cors" });
+          if (!res.ok) {
+            const txt = await res.text().catch(() => "");
+            console.warn(
+              `No se pudieron cargar boletas para ${anio}-${mes}:`,
+              txt || `HTTP ${res.status}`
+            );
+            continue;
+          }
+          data = await res.json();
+        } catch (err) {
+          console.error(`Error al cargar boletas para ${anio}-${mes}:`, err);
+          continue;
+        }
+
+        // Acumular montos por partida en el mapa del año
+        data.forEach(item => {
+          const codPartida = item.codPartida;
+          if (!codPartida) return;
+
+          if (!mapaPartidas[codPartida]) {
+            const ingEgr = item.ingEgr || inferIngEgr(codPartida);
+
+            mapaPartidas[codPartida] = {
+              codPartida,
+              ingEgr,
+              valores: {
+                mes: new Array(12).fill(0),
+                suma: 0,
+                acumAnt: 0,
+                total: 0
+              }
+            };
+          }
+
+          const v = Number(item.monto ?? 0);
+          if (!isNaN(v)) {
+            const idxMes = mes - 1;
+            mapaPartidas[codPartida].valores.mes[idxMes] += v;
+          }
+        });
+
+        // Si es el año que estoy viendo, pinto mes a mes en la tabla
+        if (anio === annoSeleccionado) {
+          aplicarValoresMesEnTablaReal(mes, data);
+        }
+      }
+
+      // Convertir el mapa del año a arreglo y calcular suma y neto
+      const arrPartidas = Object.values(mapaPartidas);
+
+      // Totales por mes para el neto
+      const netMes = new Array(12).fill(0);
+
+      arrPartidas.forEach(row => {
+        const meses = row.valores.mes;
+        // suma de la fila
+        const suma = meses.reduce((acc, n) => acc + (n || 0), 0);
+        row.valores.suma  = suma;
+        row.valores.total = suma;  // acumAnt = 0 en este escenario inicial
+
+        // aportar al neto según I/E
+        if (row.ingEgr === "I") {
+          for (let i = 0; i < 12; i++) {
+            netMes[i] += meses[i] || 0;
+          }
+        } else if (row.ingEgr === "E") {
+          for (let i = 0; i < 12; i++) {
+            netMes[i] -= meses[i] || 0;
+          }
+        }
+      });
+
+      // Fila neto para este año
+      const sumaNeto = netMes.reduce((acc, n) => acc + (n || 0), 0);
+      const netRow = {
+        codPartida: 0,
+        ingEgr: "N",
+        valores: {
+          mes: netMes,
+          suma: sumaNeto,
+          acumAnt: 0,
+          total: sumaNeto
+        }
+      };
+
+      // Guardar en el cache global con el formato esperado por aplicarValoresDesdeCache
+      valoresRealesPorAnno[anio] = [...arrPartidas, netRow];
+    }
+
+    // Marcamos que hay valores reales activos para que al cambiar de año use el cache
+    valoresRealesActivos = true;
+
+    // Recalcular neto en el año visible (ya se fue actualizando, pero igual aseguramos)
+    recalcularFilaNetoReal();
+
+    setStatus("Todas las boletas han sido cargadas para los años del proyecto.");
+    alert("Boletas cargadas para todos los años disponibles del proyecto.");
+  } catch (err) {
+    console.error("Error al cargar todas las boletas:", err);
+    alert("Ocurrió un error al cargar todas las boletas. Revise la consola.");
+    setStatus("Error al cargar todas las boletas.");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = oldText || "Cargar todas las boletas";
+    }
+  }
+}
+
+// Guardar TODOS los años
 // Guardar TODOS los años
 async function guardarTodosLosAnios() {
   if (!proyectoSeleccionado) {
@@ -1877,13 +2346,25 @@ async function guardarTodosLosAnios() {
     }
     setStatus("Guardando flujo real de todos los años...");
 
+    // 🔹 Si tenemos cache (por ejemplo, luego de 'Cargar todas las boletas'),
+    //     usamos SIEMPRE ese cache para todos los años.
+    const hayCache = Object.keys(valoresRealesPorAnno).length > 0;
+
     for (let anio = annoIni; anio <= annoFin; anio++) {
-      if (anio === annoSeleccionado) {
-        filas.push(...construirFilasParaAnno(anio));
+      let filasAnno = [];
+
+      if (hayCache && valoresRealesPorAnno[anio]) {
+        // ✅ usar valores calculados en memoria (boletas)
+        filasAnno = construirFilasParaAnnoDesdeCache(anio);
+      } else if (anio === annoSeleccionado) {
+        // fallback: año visible → usar tabla
+        filasAnno = construirFilasParaAnno(anio);
       } else {
-        const filasAnno = await construirFilasParaAnnoDesdeBackend(anio);
-        filas.push(...filasAnno);
+        // fallback: otros años → consultar backend
+        filasAnno = await construirFilasParaAnnoDesdeBackend(anio);
       }
+
+      filas.push(...filasAnno);
     }
 
     if (!filas.length) {
@@ -1912,10 +2393,11 @@ async function guardarTodosLosAnios() {
   } finally {
     if (btnGuardarTodos) {
       btnGuardarTodos.disabled = false;
-      btnGuardarTodos.textContent = oldText || "Guardar todos";
+      btnGuardarTodos.textContent = oldText || "Guardar todos los años";
     }
   }
 }
+
 
 async function initRealFlow() {
   const tieneTablaFlujoReal =
