@@ -16,7 +16,7 @@ public class CiaDAOImpl implements CiaDAO {
     private static final String SQL_LISTAR_VIGENTES = """
         SELECT CODCIA, DESCIA, DESCORTA, VIGENTE
           FROM CIA
-         WHERE VIGENTE = 'S'
+         WHERE VIGENTE = '1'
          ORDER BY DESCORTA
         """;
 

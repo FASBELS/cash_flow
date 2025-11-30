@@ -18,7 +18,7 @@ public class ProyectoDAOImpl implements ProyectoDAO {
         String sql = """
             SELECT CodPyto, NombPyto, AnnoIni, AnnoFin
             FROM PROYECTO
-            WHERE Vigente = 'S'
+            WHERE Vigente = '1'
             ORDER BY NombPyto
         """;
 
@@ -48,7 +48,7 @@ public List<ProyectoDetalleDTO> listarProyectosPorCia(int codCia) throws Excepti
     String sql = """
         SELECT CodCia, CodPyto, NombPyto, AnnoIni, AnnoFin
         FROM PROYECTO
-        WHERE Vigente = 'S'
+        WHERE Vigente = '1'
           AND CodCia = ?
         ORDER BY NombPyto
     """;
