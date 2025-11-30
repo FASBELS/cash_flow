@@ -9,20 +9,9 @@ public class DBConnection {
     private static volatile DBConnection instance;
     private volatile Connection connection;
 
-    // Oracle de Fabio:
-    /*private final String URL = "jdbc:oracle:thin:@//localhost:1522/XEPDB1";
-    private final String USER = "HR";
-    private final String PASSWORD = "hr";*/
-
-    // Oracle de Alex:
-    /*private final String URL = "jdbc:oracle:thin:@//localhost:1521/XEPDB1";
-    private final String USER = "PY DEV02"; 
-    private final String PASSWORD = "123";*/
-
-    // Oracle de Anthony:
-    private final String URL = "jdbc:oracle:thin:@//localhost:1522/XEPDB1";
-    private final String USER = "HR";
-    private final String PASSWORD = "hr";
+    private final String URL = "jdbc:oracle:thin:@//localhost:1521/xe";
+    private final String USER = "py06";
+    private final String PASSWORD = "123";
 
     private static final int VALID_TIMEOUT = 5;
 

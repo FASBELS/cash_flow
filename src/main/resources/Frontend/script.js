@@ -1,5 +1,5 @@
-const PROJECTS_BASE = "http://localhost:8080/api/proyectos";
-const API_BASE      = "http://localhost:8080/api";
+const PROJECTS_BASE = "http://localhost:8081/api/proyectos";
+const API_BASE      = "http://localhost:8081/api";
 let proyectos = [];
 let conceptosCargados = { ingresos: [], egresos: [] };
 let proyectoSeleccionado = null;
