@@ -17,13 +17,6 @@ import com.dsi.spring.flujoreal.spring_cashflow.dto.PartidaDTO;
 
 public class PartidaDAOImpl implements PartidaDAO {
 
-    /**
-     * Si tus tablas están en otro esquema (p.ej. DSI), pon aquí el owner:
-     *  - Deja "" si están en el mismo usuario de conexión.
-     *  - Ejemplo: SCHEMA = "DSI";
-     *
-     * También puedes definir -DDB_SCHEMA=DSI al ejecutar.
-     */
     private static final String SCHEMA =
             System.getProperty("DB_SCHEMA", "").trim();
 
@@ -31,9 +24,6 @@ public class PartidaDAOImpl implements PartidaDAO {
         return (SCHEMA.isEmpty()) ? table : (SCHEMA + "." + table);
     }
 
-    // SQL SOLO con PROY_PARTIDA (para armar el árbol de conceptos)
-    // Ya no dependemos de PROY_PARTIDA_MEZCLA para nivel ni para orden.
-    // ⬇️ IMPORTANTE: ya NO filtramos por pa.Nivel IN (1, 2) para poder traer niveles 3, 4, 5, ...
     private static final String SQL =
         "SELECT pr.IngEgr, " +
         "       pa.CodPartida, " +
@@ -41,7 +31,7 @@ public class PartidaDAOImpl implements PartidaDAO {
         "       pa.DesPartida, " +
         "       pr.Nivel       AS Nivel, " +   // nivel del árbol viene directo de PROY_PARTIDA
         "       pa.Semilla, " +
-        "       NULL           AS Orden " +   // ya no usamos ppm.Orden; se ordena por código
+        "       NULL           AS Orden " +  
         "FROM " + T("PROY_PARTIDA") + " pr " +
         "JOIN " + T("PARTIDA") + " pa " +
         "  ON pa.CodCia     = pr.CodCia " +
@@ -102,13 +92,8 @@ public List<PartidaDTO> listarPorProyecto(int codCia, int codPyto, int nroVersio
             }
         }
 
-        // 🔹 Nos quedamos con una copia de SOLO las que vienen de PROY_PARTIDA
         List<PartidaDTO> soloNivel3 = new ArrayList<>(lista);
 
-        // 2) A partir de esas, calcular los códigos de sus padres (nivel 2 y 1)
-        //    usando la regla de tu hoja:
-        //    - Nivel 3 → centena: 101..199 → 100, 1101..1199 → 1100
-        //    - Nivel 2 → grupo: 100,200,... → grupo = /100, índiceNivel1 = grupo-1 (000..010)
         Set<String> codPadres = new HashSet<>();
 
         for (PartidaDTO dto : soloNivel3) {
