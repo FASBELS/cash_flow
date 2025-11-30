@@ -50,8 +50,8 @@ public class PartidaDAOImpl implements PartidaDAO {
         "WHERE pr.CodCia      = ? " +
         "  AND pr.CodPyto     = ? " +
         "  AND pr.NroVersion  = ? " +
-        "  AND pr.Vigente     = 'S' " +
-        "  AND pa.Vigente     = 'S' " +
+        "  AND pr.Vigente     = '1' " +
+        "  AND pa.Vigente     = '1' " +
         "ORDER BY pr.IngEgr, " +
         "         pr.Nivel, " +
         "         pa.CodPartida";
@@ -156,7 +156,7 @@ public List<PartidaDTO> listarPorProyecto(int codCia, int codPyto, int nroVersio
               .append("       NULL AS Orden ")
               .append("FROM ").append(T("PARTIDA")).append(" pa ")
               .append("WHERE pa.CodCia = ? ")
-              .append("  AND pa.Vigente = 'S' ")
+              .append("  AND pa.Vigente = '1' ")
               .append("  AND pa.CodPartidas IN (");
 
             // tantos ? como códigos de padres tengamos

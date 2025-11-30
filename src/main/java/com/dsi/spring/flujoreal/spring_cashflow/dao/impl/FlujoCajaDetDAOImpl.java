@@ -580,7 +580,7 @@ private void ensureFlujoCajaRow(
             1, ?,
             ?, SUBSTRB(?,1,10),
             1, 0,
-            'EST', 'ACT', 'S'
+            'EST', 'ACT', '1'
         )
     """;
     try (PreparedStatement ps = cn.prepareStatement(ins)) {

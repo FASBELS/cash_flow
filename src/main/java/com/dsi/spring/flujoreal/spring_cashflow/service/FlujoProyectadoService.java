@@ -129,13 +129,13 @@ public class FlujoProyectadoService {
             AND pp.CodPartida = p.CodPartida
             WHERE pp.CodCia = ?
             AND pp.CodPyto = ?
-            AND pp.Vigente = 'S'
+            AND pp.Vigente = '1'
             AND pp.NroVersion = (
                     SELECT MAX(p2.NroVersion)
                     FROM PROY_PARTIDA p2
                     WHERE p2.CodCia = pp.CodCia
                     AND p2.CodPyto = pp.CodPyto
-                    AND p2.Vigente = 'S'
+                    AND p2.Vigente = '1'
             )
             ORDER BY p.IngEgr, p.CodPartida
             """;
